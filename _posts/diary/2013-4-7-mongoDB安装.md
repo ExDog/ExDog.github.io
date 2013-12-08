@@ -4,7 +4,6 @@ category : 教程
 tagline: "__一"
 tags : [web]
 ---
-{% include JB/setup %}
 ## 简介 
 
 ### 什么是mongoDb

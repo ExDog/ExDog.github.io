@@ -4,7 +4,6 @@ category : 教程
 tagline: "android底层关于刷机"
 tags : [android]
 ---
-{% include JB/setup %}
 
   最近公司需要在一个android的盒子上加一个原野的触屏驱动，于是呼就折腾android系统折腾了将尽一个月，一点进展都木有；倒是开了不少资料，刷机刷的很溜。
 

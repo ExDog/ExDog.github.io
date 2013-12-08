@@ -2,7 +2,6 @@
 layout: default
 tagline: 个人简历
 ---
-{% include JB/setup %}
 
 ### 个人信息： ###
 

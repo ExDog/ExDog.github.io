@@ -4,7 +4,6 @@ category : 教程
 tagline: "android内核编译"
 tags : [android]
 ---
-{% include JB/setup %}
 
 ## android内核编译时配置问题
 - 问题一： 

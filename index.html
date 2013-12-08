@@ -7,7 +7,7 @@ description: "用心去跟随时代的脚步1"
 
 <h2>最近日志<a class="pull-right" href="/posts.html">更多...</a></h2>
 <hr>
-{% for post in site.posts limit:8 %}
+{% for post in site.posts limit:6 %}
 <h2><a href="{{ post.url }}">{{ post.title }}</a></h2>
 <p>{{ post.content | strip_html | truncatewords: 5 }}</p>
 <span class="label label-primary">日期:</span> <span class="label label-warning">{{ post.date | date: "%Y年%m月%d日" }}</span>

@@ -3,7 +3,6 @@ layout: post
 title: Android优秀开源项目【持续更新】
 tags:
 - android
-- 开源项目
 - 收藏
 ---
 

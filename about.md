@@ -2,8 +2,6 @@
 layout: default
 tagline: 个人简历
 ---
-
-[html简历](./Resume.html)
 ### 个人信息： ###
 
     姓名 : 夏国强     姓别 : 男      年龄 : 23

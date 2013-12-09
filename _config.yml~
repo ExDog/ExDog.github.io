@@ -1,0 +1,14 @@
+﻿pygments:     true
+markdown:     rdiscount
+permalink:    /posts/:year-:month-:day-:title.html
+title:        懿心
+description:  Mr.xia的个人站点,记录心情与知识。
+keywords:     个人站点,博客,编程
+author:       Mr.xia
+email:        love_mobile@163.com
+github:       http://github.com/ExDog
+
+#添加百度统计
+analytics :
+provider : custom
+

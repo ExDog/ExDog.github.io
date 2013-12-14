@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>2013-12-11-android-框架.html</title>
+
+</head>
+
+<body>
+
+<hr />
+
+<p>layout: post
+category : 系列
+tagline: "android-框架系列"</p>
+
+<h2>tags : [android]</h2>
+
+<h2>注解+反射</h2>
+
+<p>android 利用注解加反射完成ui构造，ui绑定，点击事件绑定。</p>
+
+<ul>
+<li><p>Activity初始化的时候，传入Activity，然后利用反射，运行时，去获取其中的所有注解，并通过注解去获取id，绑定点击事件</p>
+
+<pre><code>Field[] fields = injectedSource.getClass().getDeclaredFields();//运行时获取所有类成员
+        if(fields!=null &amp;&amp; fields.length&gt;0){
+                for(Field field : fields){
+                        ViewInject viewInject = field.getAnnotation(ViewInject.class);//找到ViewInject注解
+                        if(viewInject!=null){
+                                int viewId = viewInject.id();
+                                try {
+                                      field.setAccessible(true);
+                                      field.set(injectedSource,sourceView.findViewById(viewId)); //绑定界面
+                                } catch (Exception e) {
+                                        e.printStackTrace();
+                                }
+
+
+<pre><code>                            String clickMethod = viewInject.click();
+                            if(!TextUtils.isEmpty(clickMethod))
+                            setViewClickListener(sourceView,field,clickMethod); //绑定监听
+                            }
+                            }
+                            }
+</code></pre>
+
+</code></pre></li>
+<li><p>view注解类</p></li>
+</ul>
+
+<p>以下两个元注解:
+@Target 用于标识注解作用域, type,field,mod</p>
+
+<p>@Retention 得到时状态.</p>
+
+<pre><code>    @Target(ElementType.FIELD)
+    @Retention(RetentionPolicy.RUNTIME)   //申明只有在运行时通过反射来得到注解
+    public @interface ViewInject {
+    public int id();
+    public String click() default "";
+    public String longClick() default "";
+    public String itemClick() default "";
+    public String itemLongClick() default "";
+    public Select select() default @Select(selected="") ;
+    }
+</code></pre>
+
+<ul>
+<li><p>使用</p>
+
+<pre><code>@ViewInject(id=R.id.button,click="btnClick") Button button;
+</code></pre></li>
+</ul>
+
+</body>
+</html>

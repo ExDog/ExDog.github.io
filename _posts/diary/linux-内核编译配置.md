@@ -1,7 +1,7 @@
 ---
 layout: post
 tagline: "android内核配置"
-tags : 硬件
+tags : [硬件]
 ---
 
 * 内核配置

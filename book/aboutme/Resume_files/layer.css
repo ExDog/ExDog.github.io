@@ -1,0 +1,60 @@
+@charset "utf-8";
+/* Effective stylesheet produced by snapshot save */
+html, body { margin: 0px; padding: 0px; font-family: Calibri; font-size: 12px; color: rgb(61, 61, 61); width: 100%; background: url("background.gif") repeat scroll 0% 0% transparent; }
+body { padding: 0px 0px 30px; background: url("background-2.gif") repeat-x scroll left top transparent; }
+a { font-size: 13px; color: rgb(0, 153, 204); text-decoration: none; outline: medium none; }
+a:visited { text-decoration: none; color: rgb(0, 153, 204); }
+a:hover { text-decoration: none; color: rgb(204, 0, 0); }
+a:focus { outline: 0px none; }
+a:active { text-decoration: none; }
+p { margin: 0px; padding: 0px; line-height: 160%; }
+img { border: medium none; }
+ul, li { margin: 0px; padding: 0px; list-style: disc outside none; }
+div { word-wrap: break-word; }
+h1, h2, h3, h4, h5, h6 { margin: 0px; padding: 0px; font-weight: normal; }
+noscript { text-align: center; background: none repeat scroll 0% 0% rgb(255, 255, 0); color: rgb(0, 0, 0); font-size: 18px; }
+.clear { clear: both; height: 0px; width: 0px; font-size: 0px; }
+.hide { display: none; }
+.pos { width: 1020px; margin: 0px auto; }
+.contents { float: left; width: 720px; }
+.sliderBar { float: right; width: 280px; padding: 0px 0px 20px; }
+.blog { position: absolute; top: 0px; right: 0px; width: 180px; height: 180px; }
+.top { position: relative; margin: 0px 0px 20px; }
+.contents h1 { padding: 0px 0px 0px 30px; height: 83px; line-height: 80px; background: url("portfolio.png") no-repeat scroll 0% 0% transparent; font-size: 32px; }
+.contents h1 span { font-size: 20px; }
+.content { width: 712px; margin: 0px auto; }
+.logo { padding: 10px 0px 0px 10px; width: 100px; height: 100px; }
+.list { background: none repeat scroll 0% 0% rgb(238, 234, 235); }
+.list h2 { position: relative; height: 55px; }
+.list h2 span { display: block; width: 720px; padding: 5px 0px 0px 50px; height: 55px; position: absolute; top: 0px; left: -30px; font-size: 16px; color: rgb(255, 255, 255); }
+.list h3 { font-size: 22px; font-weight: bold; }
+.list h4 { font-size: 17px; font-weight: bold; padding: 10px 0px 5px; }
+.list a { font-size: 17px; font-weight: bold; padding: 10px 0px 5px; }
+.list li { position: relative; }
+.list li h3 { position: relative; padding: 10px; border: 1px solid rgb(153, 153, 153); border-radius: 5px; box-shadow: 0px 0px 5px rgb(204, 204, 204); background: linear-gradient(rgb(254, 254, 254), rgb(239, 239, 239)) repeat scroll 0% 0% transparent; }
+.list li .show { position: relative; height: 100%; overflow: hidden; border: 1px solid rgb(153, 153, 153); display: block; margin: 0px 0px 10px; padding: 10px; font-size: 15px; font-family: Calibri; text-align: justify; border-radius: 5px; box-shadow: 0px 0px 8px rgb(204, 204, 204); background: linear-gradient(rgb(254, 254, 254), rgb(239, 239, 239)) repeat scroll 0% 0% transparent; }
+.list .show ul { margin: 0px 0px 0px 5px; }
+.list .show li { margin: 0px 0px 3px 15px; }
+.demo1 h2 span { background: url("demo1.png") repeat scroll 0% 0% transparent; }
+.contents .bottom h6 { background: url("block-footer-bg.png") repeat scroll 0% 0% transparent; height: 33px; }
+.copyRight { clear: both; background: url("paper-black-bg.jpg") repeat scroll 0% 0% transparent; height: 80px; text-align: center; }
+.copyRight p { margin: 0px 0px 20px; padding: 10px 0px 0px 10px; color: rgb(255, 255, 255); font-size: 12px; font-family: Georgia; }
+.copyRight a { font-family: Georgia; font-size: 12px; color: rgb(116, 170, 0); }
+.copyRight h7 { font-family: "������κ"; font-size: 20px; color: rgb(255, 255, 255); }
+.copyRight a:hover { text-decoration: underline; }
+.about { position: relative; background: url("about.jpg") no-repeat scroll right top rgb(238, 234, 235); }
+.about .stickers { position: absolute; top: -50px; right: -40px; width: 205px; height: 97px; background: url("tape-2.png") repeat scroll 0% 0% transparent; }
+.about h2 { margin: 3px 0px 0px; padding: 30px 0px 5px 20px; font-size: 30px; font-weight: bold; }
+.about h5 { position: absolute; top: -10px; left: 10px; height: 149px; font-size: 0px; text-indent: -9999px; width: 50px; background: url("about.png") repeat scroll 0% 0% transparent; }
+.about h3 { margin: 0px 0px 15px; }
+.about .box { margin: 0px 10px 10px 20px; }
+.about .box h4 { font-size: 16px; font-weight: bold; }
+.about .box ul { margin: 0px 0px 5px 15px; }
+.about .labname { margin: 0px 0px 15px 25px; }
+.contact { position: relative; padding: 0px 0px 30px; background: url("contact.jpg") no-repeat scroll right top rgb(238, 234, 235); }
+.contact .contactinfo { margin: 0px 10px 10px 20px; }
+.contact h2 { margin: 3px 0px 0px; padding: 30px 0px 5px 20px; font-size: 30px; font-weight: bold; }
+.contact .face { padding: 0px 0px 0px 10px; width: 260px; }
+.contact ul { padding: 3px 0px; }
+.contact h7 { font-family: "������κ"; font-size: 14px; font-weight: bold; margin: 0px 0px 0px 35px; }
+.content .box { position: relative; padding: 20px; width: 670px; }

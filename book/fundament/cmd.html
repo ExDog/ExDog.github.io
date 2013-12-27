@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BUI 控件</title>
+  <meta name="description" content="BUI 控件库的详细文档">
+  <meta name="author" content="dxq613@gmail.com">
+  <link href="favicon.ico" type="image/x-icon" rel="shortcut icon">
+  <link href="https://s.tbcdn.cn/g/fi/bui/css/dpl-min.css" rel="stylesheet"> 
+  <link href="https://s.tbcdn.cn/g/fi/bui/css/bui-min.css" rel="stylesheet">
+  <link href="../assets/css/prettify.css" rel="stylesheet"> 
+  <link href="../assets/css/page.css" rel="stylesheet"> 
+  <script type="text/javascript" src="../assets/js/prettify.js"></script>
+</head>
+<body>
+  <div class="container tutorial">
+    <h1>CMD 组织模块</h1>
+    <div class="intro-wraper">
+      <img style="width:200px;height:200px" class="intro-img" src="../assets/img/module.jpg"/>
+      <div class="introduce">
+        <h2>导引</h2>
+        <p>欢迎使用BUI！在这一章节里，我们将学习以下内容:</p>
+        <ol>
+          <li>CMD的概念</li>
+          <li>几种组织模块方式的差别</li>
+          <li>BUI的加载模块方式</li>
+        </ol>
+        <ul class="intro-level">
+          <li><span>难度：</span>中级</li>
+          <li><span>版本：</span>1.0</li>
+        </ul>
+      </div>
+    </div>
+    <h2>模块</h2>
+    <p>什么是模块？在前端领域可以把模块认为是完成一个系统一部分功能的代码片段，我们往往把模块定义在一个文件内，同时也会合并模块一起加载。Javascript的模块间的依赖，默认方式是按照script标签的前后顺序进行的，但是这种依赖关系十分脆弱，而且需要手工维护。</p>
+    <p>模块之间存在依赖关系，所以执行一个模块前，必须加载并执行它所依赖的模块，同时我们也要避免循环依赖，所以想在前端领域使用模块我们必须搞清楚模块的定义，依赖和加载方式，目前比较流行的2种方式是<a target="_blank" href="https://github.com/seajs/seajs/issues/242">CMD</a>和 <a target="_blank" href="http://requirejs.org/docs/whyamd.html">AMD</a></p>
+
+    <h2>CMD的概念</h2>
+    <h3>模块概念</h3>
+    <p>CMD（Common Module Definition）是seajs推广过程中模块定义规范化的产物，写法类似于Nodejs的模块定义方式差异在于：</p>
+    <ul class="tutor-list">
+      <li>NodeJS 里，模块文件里的 this === module.exports；SeaJS 里，this === window。</li>
+      <li>NodeJS 里，模块文件里的 return xx 会被忽略；SeaJS 里，return xx 等价 module.exports = xx。</li>
+      <li>NodeJS 里，require 是懒加载 + 懒执行的。在 SeaJS 里是提前加载好 + 懒执行。</li>
+      <li>SeaJS 里，require(id) 中的 id 必须是字符串直接量。NodeJS 里没这个限制。</li>
+    </ul>
+    <h3>创建模块</h3>
+    <p>通过以下示例了解CMD中模块的创建</p>
+    <pre>
+      <textarea>
+        define('hello', ['bui/common'], function(require, exports, module) {
+          var BUI = require('bui/common');
+          // 模块代码
+
+        });
+      </textarea>
+    </pre>
+    <ul class="tutor-list">
+      <li>模块名称: 用于加载模块时使用，可以为空，根据路径和文件名作为模块名称</li>
+      <li>依赖的模块 : 设置依赖的模块，可以为空，则按照模块内部使用require函数时确定依赖的模块（未指定模块依赖关系时，不能更改require参数名称）</li>
+      <li>回调函数： 模块执行时执行的函数，在第一次被require前，函数内的代码不会执行。</li>
+    </ul>
+
+    <h3>加载模块</h3>
+    <pre>
+      <textarea>
+        seajs.use('hello',function(Hello){
+
+        });
+      </textarea>
+    </pre>
+    <ul class="tutor-list">
+      <li>没有全局性的require函数</li>
+      <li>回调函数执行前，hello模块必须加载并执行完毕</li>
+      <li>hello依赖的模块也必须加载、执行完毕</li>
+    </ul>
+
+    <h2>AMD的概念</h2>
+    <h3>定义</h3>
+    <p>AMD（Asynchronous Module Definition）,是基于requireJS指定并推广开来的一种模块定义方式，AMD基本兼容CMD 定义模块的方式，但是回调函数中，不提供exports和modules对象，只提供return 的方式定义模块</p>
+    <ul class="tutor-list">
+      <li>使用define方法定义模块，通过回调函数（factory）生成模块</li>
+      <li>定义模块时指定模块依赖（也可以省略）</li>
+      <li>多次依赖一个模块，只加载一遍</li>
+      <li>传递依赖的模块的引用到factory函数</li>
+      <li>不需要合并模块时，不需要指定模块id</li>
+    </ul>
+    <h3>模块创建</h3>
+    <pre>
+      <textarea>
+      //Calling define with module ID, dependency array, and factory function
+      define('myModule', ['dep1', 'dep2'], function (dep1, dep2) {
+
+          //Define the module value by returning a value.
+          return function () {};
+      });
+      </textarea>
+    </pre>
+    <h3>模块加载</h3>
+    <pre>
+      <textarea>
+      require('myModule',function(MyModule){
+
+      });
+      </textarea>
+    </pre>
+    <p>AMD的模块加载使用全局函数<code>require</code></p>
+    
+    <h2>Kissy的模块</h2>
+    <h3>模块的创建</h3>
+    <p>Kissy的模块定义跟CMD和AMD有相同点，但是也有不同点，依赖模块写在最后面，factory里传入的是模块引用。</p>
+    <pre>
+      <textarea>
+      KISSY.add('myModule',function(dep1,dep2){
+
+      },{
+        requires : ['dep1', 'dep2']
+      });
+      </textarea>
+    </pre>
+    <h3>模块的加载</h3>
+    <pre>
+      <textarea>
+      KISSY.use('myModule',function(S,MyModule){
+
+      });
+      </textarea>
+    </pre>
+    <p>Kissy加载模块时，跟CMD，AMD最大的差异在于，factory函数的第一个参数是KISSY本身</p>
+
+    <h2>BUI加载模块</h2>
+    <p>BUI的模块定义按照CMD的写法，无论使用seajs还是Kissy作为Loader。</p>
+    <p>加载模块时，可以按照seajs的写法，也可以按照Kissy的写法，但是一般情况下按照BUI封装的写法，可以兼容seajs和Kissy</p>
+    <pre>
+      <textarea>
+      BUI.use('myModule',function(MyModule){
+
+      });
+      </textarea>
+    </pre>
+
+    <h2>下一步学习</h2>
+    <p>BUI的基础内容到这里告一段落，你可以去看一下BUI提供的<a data-id="util-base" class="page-action" href="util/util-base.html">工具类</a>，然后进入到BUI<a href="#" data-id="controller" class="page-action" >控件编写</a>的学习中。</p>
+  </div>
+  <script src="https://s.tbcdn.cn/g/fi/bui/jquery-1.8.1.min.js"></script>
+  <script src="https://s.tbcdn.cn/g/fi/bui/seed-min.js?t=201212261326"></script> 
+  <script src="../assets/js/config.js"></script> 
+  <script>
+    BUI.use('common/page',function (Page) {
+      new Page().init();
+    });
+  </script>
+</body>
+</html>

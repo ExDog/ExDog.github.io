@@ -2,7 +2,7 @@
 layout: post
 category : 教程
 tagline: "android root 原理分析"
-tags : [android]
+tags : [硬件]
 ---
 
 # android 获取权限的原理 #

@@ -10,62 +10,62 @@ description: "用心去跟随时代的脚步1"
 
 
 #viewport {
-	position: relative;
-	width: 600px;
-	height: 450px;
-	top: 30px;
-	overflow: hidden;
-	 
-	margin: 0 auto;
-	padding: 10px;
-	border-top: 1px solid #ccc;
-	border-bottom: 1px solid #ccc;
+        position: relative;
+        width: 600px;
+        height: 100%;
+        top: 30px;
+        overflow: hidden;
+        color: #aaa;
+
+        margin: 0 auto;
+        padding: 10px;
+        border-top: 1px solid #ccc;
+        border-bottom: 1px solid #ccc;
 }
 #container{
-	position: absolute;
-	left:0;
-	width: 100%;
-	height: 450px;
+        position: absolute;
+        left:0;
+        width: 100%;
+        height: 450px;
 }
 
 img {
-	display: block;
-	position: absolute;
+        display: block;
+        position: absolute;
 }
 h1{
-	padding: 10px 0 0 0;
-	font-size: 200%;
-	text-align: center;
+        padding: 10px 0 0 0;
+        font-size: 200%;
+        text-align: center;
 }
 .wrap
 {
-	position:absolute;
+        position:absolute;
 }
 .mask
 {
-	position:absolute;
-	width: 100%;
-	height: 100%;
-	z-index: 1;
-	top:0;
-	left:0;
-	xborder: 1px solid lime;
-	-webkit-transition: background-color 0.3s linear;
+        position:absolute;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        top:0;
+        left:0;
+        xborder: 1px solid lime;
+        -webkit-transition: background-color 0.3s linear;
 }
 
 .mask:hover
 {
-	background-color: rgba(255,255,255,0.3);
+        background-color: rgba(255,255,255,0.3);
 }
 
 
 
 </style>
-</head>
-<body>
 
+<h1>关于我的工作环境和工作平台</h1>
 <div id="viewport">
-	<div id="container"> </div>
+        <div id="container"> </div>
 </div>
 <script src="http://code.jquery.com/jquery-1.6.2.min.js"></script>
 <script>
@@ -74,27 +74,27 @@ var $container = $('#container');
 var h = $container.outerHeight();
 
 function Row(r) {
-	this.images = [];
-	
-	for (var i=0;i<6;i++){
-		
-		var src = 'img/pictures/'+r+'/'+i+'.png';
-		
-		//console.log(src);
-		var $img = $('<img>');
-		var $mask = $('<div>').addClass('mask');
-		
-		var $wrap = $('<div>');
-		$wrap.append($img).append($mask).addClass('wrap');
-		
-		var img = $img[0];
-		var picture = { $wrap: $wrap, row: r, loaded: false };
-		this.images.push(picture);
-		
-		loadImg(i, picture, this.images);
-		if (i == 0)
-			img.src = src;
-	}	
+        this.images = [];
+
+        for (var i=0;i<6;i++){
+
+                var src = 'img/pictures/'+r+'/'+i+'.png';
+
+                //console.log(src);
+                var $img = $('<img>');
+                var $mask = $('<div>').addClass('mask');
+
+                var $wrap = $('<div>');
+                $wrap.append($img).append($mask).addClass('wrap');
+
+                var img = $img[0];
+                var picture = { $wrap: $wrap, row: r, loaded: false };
+                this.images.push(picture);
+
+                loadImg(i, picture, this.images);
+                if (i == 0)
+                        img.src = src;
+        }
 }
 
 
@@ -106,116 +106,115 @@ var all = rows[0].images.concat(rows[1].images).concat(rows[2].images);
 
 
 window.requestAnimFrame = (function(){
-	  return  window.requestAnimationFrame       || 
-	          window.webkitRequestAnimationFrame || 
-	          window.mozRequestAnimationFrame    || 
-	          window.oRequestAnimationFrame      || 
-	          window.msRequestAnimationFrame     || 
-	          function(/* function */ callback, /* DOMElement */ element){
-	            window.setTimeout(callback, 1000 / 60);
-	          };
-	})();
-	
+          return  window.requestAnimationFrame       ||
+                  window.webkitRequestAnimationFrame ||
+                  window.mozRequestAnimationFrame    ||
+                  window.oRequestAnimationFrame      ||
+                  window.msRequestAnimationFrame     ||
+                  function(/* function */ callback, /* DOMElement */ element){
+                    window.setTimeout(callback, 1000 / 60);
+                  };
+        })();
+
 function loop(container){
-	scroll();
+        scroll();
     requestAnimFrame(loop, container);
 }
 
 var startTime = new Date;
 var dx = 0;
 function scroll(){
-	var now = new Date;
-	var dt  = now - startTime;
-	var speed = -0.02;
-	
-	//console.log(speed);
-	for (var i=0 ; i<all.length ; i++)
-	{
-		wrap(all[i]);
-	}
-	var left = dt * speed;
-	$container.css({left: ~~left }); //rounding to reduce jitter
-	dx = $container.position().left;
-	prevTime = now;
+        var now = new Date;
+        var dt  = now - startTime;
+        var speed = -0.02;
+
+        //console.log(speed);
+        for (var i=0 ; i<all.length ; i++)
+        {
+                wrap(all[i]);
+        }
+        var left = dt * speed;
+        $container.css({left: ~~left }); //rounding to reduce jitter
+        dx = $container.position().left;
+        prevTime = now;
 }
 
 function wrap(picture) {
-	if (!picture.loaded) return;
-	
-	var $wrap = picture.$wrap;
-	// 1 check if img is off-screen to the left
-	//console.log('-', dx, $img.position().left , $img.outerWidth(), '=',dx+ $img.position().left + $img.outerWidth());
-	//console.log(dx+ $img.position().left + $img.outerWidth());
-	if (dx+ $wrap.position().left + $wrap.outerWidth() < 0) 
-	{
-		// 2 move img to the right, appended at the end
-		//console.log('wrap!');
-		var row = rows[picture.row];
-		var $last = row.last.$wrap;
-		var newLeft = $last.position().left + $last.outerWidth();
-		//console.log(picture.row, row.images.indexOf(picture), $last.position().left, $last.outerWidth());
-		$wrap.css( 'left', newLeft);  
-		
-		//update last
-		row.last = picture;
-	}
-	
-	
+        if (!picture.loaded) return;
+
+        var $wrap = picture.$wrap;
+        // 1 check if img is off-screen to the left
+        //console.log('-', dx, $img.position().left , $img.outerWidth(), '=',dx+ $img.position().left + $img.outerWidth());
+        //console.log(dx+ $img.position().left + $img.outerWidth());
+        if (dx+ $wrap.position().left + $wrap.outerWidth() < 0)
+        {
+                // 2 move img to the right, appended at the end
+                //console.log('wrap!');
+                var row = rows[picture.row];
+                var $last = row.last.$wrap;
+                var newLeft = $last.position().left + $last.outerWidth();
+                //console.log(picture.row, row.images.indexOf(picture), $last.position().left, $last.outerWidth());
+                $wrap.css( 'left', newLeft);
+
+                //update last
+                row.last = picture;
+        }
+
+
 }
 
 loop($container[0]);
 
 function loadImg(i, picture, imgs){
-	var r = picture.row;
-	var $wrap = picture.$wrap;
+        var r = picture.row;
+        var $wrap = picture.$wrap;
 
-	var row = r * h/3;
-	var $img = picture.$wrap.find('img')
-	var img = $img[0];
-	
-	img.onload = function () {
-		var left = 0;
-		var prev = imgs[i-1];
-		
-		picture.loaded = true;
-		
-		if (prev) {
-			left = prev.$wrap.outerWidth() + prev.$wrap.position().left;
-			//console.log(prev.outerWidth() , prev.position().left);
-		}
-		
-		var w = h * img.width / img.height / 3
-		img.height = h/3 + 1;
-		
-		//console.log(w);
-		//resized all images to fill gaps
-		$wrap.css({
-			'top': row,
-			'left': left,
-			'width' : w,
-			'height': h/3
-		});
-		
-		
-		$('#container').append($wrap);
-		
-		var next =imgs[i+1];
-		//console.log('next',next);
-		
-		rows[r].last = picture;
-		
-		//last stop
-		if (!next) {
-			//console.log('end')			
-			return;
-		}
-		
-		var src = 'img/pictures/'+r+'/'+ (i+1) +'.png';
-		
-		//console.log('next',src);
-		next.$wrap.find('img')[0].src = src;
-	};
+        var row = r * h/3;
+        var $img = picture.$wrap.find('img')
+        var img = $img[0];
+
+        img.onload = function () {
+                var left = 0;
+                var prev = imgs[i-1];
+
+                picture.loaded = true;
+
+                if (prev) {
+                        left = prev.$wrap.outerWidth() + prev.$wrap.position().left;
+                        //console.log(prev.outerWidth() , prev.position().left);
+                }
+
+                var w = h * img.width / img.height / 3
+                img.height = h/3 + 1;
+
+                //console.log(w);
+                //resized all images to fill gaps
+                $wrap.css({
+                        'top': row,
+                        'left': left,
+                        'width' : w,
+                        'height': h/3
+                });
+
+
+                $('#container').append($wrap);
+
+                var next =imgs[i+1];
+                //console.log('next',next);
+
+                rows[r].last = picture;
+
+                //last stop
+                if (!next) {
+                        //console.log('end')
+                        return;
+                }
+
+                var src = 'img/pictures/'+r+'/'+ (i+1) +'.png';
+
+                //console.log('next',src);
+                next.$wrap.find('img')[0].src = src;
+        };
 }
 
 </script>
-

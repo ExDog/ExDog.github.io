@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta http-equiv="content-language" content="zh-cn" />
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <meta name="author" content="Mr.xia" />
+  <meta name="description" content="硬件" />
+  <meta name="keywords" content="硬件,个人站点,博客,编程" />
+  <title>懿心</title>
+  <!--link href="/rss.xml" rel="alternate" title="Mr.xia" type="application/atom+xml" /-->
+  <link rel="icon" type="image/png" href="/img/favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="favicon.ico" type="image/x-icon" rel="shortcut icon">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/dpl-min.css" rel="stylesheet">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/bui-min.css" rel="stylesheet">
+    <link href="../assets/css/prettify.css" rel="stylesheet">
+    <link href="../assets/css/page.css" rel="stylesheet">
+    <script type="text/javascript" src="../assets/js/prettify.js"></script>
+</head>
+<body>
+
+		<div class="container">
+ 
+   <div class="col-xs-12 col-sm-8 col-md-8">
+	  <div class="panel panel-default">
+	    <div class="panel-body">
+
+
+<hr>
+<h1>android 部分调试命令</h1>
+
+
+
+
+<div class="intro-wraper">
+    <img class="intro-img" src="../assets/img/adb_cmd.jpg"/>
+
+    <div class="introduce">
+        <h2>导引</h2>
+
+        <p>关于杨梅派盒子多点触控</p>
+        <ol>
+            <li>关于单点触控解决办法</li>
+            <li>关于多点触控解决办法</li>
+         </ol>
+        <ul class="intro-level">
+            <li><span>难度：</span>中等</li>
+            <li><span>版本：</span>1.0</li>
+        </ul>
+    </div>
+</div>
+
+
+<h3>Dumpsys</h3>
+
+<p>  这个命令告诉你关于设备的你所感兴趣的系统服务状态。</p>
+
+<p>  电脑终端启动
+<code>$adb shell su -- dumpsys window</code></p>
+
+<p>  在开发板终端启动</p>
+
+<pre><code>$su
+$dumpsus input
+</code></pre>
+
+<h3>getevent</h3>
+
+<p>   这个命令可以查看input子系统上报的信息；</p>
+
+<p>   $adb shell su --getevent -p
+   参数</p>
+
+<pre><code> -i 显示更多比-p
+ -l 将进制数翻译成真正含义
+ -t 时时捕获上报数据
+</code></pre>
+
+<p>   例子：</p>
+
+<pre><code>  $adb shell su -- getevent -lt /dev/input/event1
+  [   78826.389007] EV_ABS       ABS_MT_TRACKING_ID   0000001f
+  [   78826.389038] EV_ABS       ABS_MT_PRESSURE      000000ab
+  [   78826.389038] EV_ABS       ABS_MT_POSITION_X    000000ab
+  [   78826.389068] EV_ABS       ABS_MT_POSITION_Y    0000025b
+  [   78826.389068] EV_ABS       ABS_MT_SLOT          00000001
+  [   78826.389068] EV_ABS       ABS_MT_TRACKING_ID   00000020
+  [   78826.389068] EV_ABS       ABS_MT_PRESSURE      000000b9
+  [   78826.389099] EV_ABS       ABS_MT_POSITION_X    0000019e
+  [   78826.389099] EV_ABS       ABS_MT_POSITION_Y    00000361
+  [   78826.389099] EV_SYN       SYN_REPORT           00000000
+  [   78826.468688] EV_ABS       ABS_MT_SLOT          00000000
+  [   78826.468688] EV_ABS       ABS_MT_TRACKING_ID   ffffffff
+  [   78826.468719] EV_ABS       ABS_MT_SLOT          00000001
+  [   78826.468719] EV_ABS       ABS_MT_TRACKING_ID   ffffffff
+  [   78826.468719] EV_SYN       SYN_REPORT           00000000
+</code></pre>
+
+<h3>android 网线远程调试</h3>
+
+<h4>首先android得root</h4>
+
+<blockquote><p>  1.android 终端中以root权限执行</p></blockquote>
+
+<pre><code> stop adbd
+ setprop service.adb.tcp.port 5555
+ start adbd
+
+
+
+ adb tcpip 5555  //在终端使用这个命令=以上三个命令
+</code></pre>
+
+<blockquote><p>  2.得到android ip，</p></blockquote>
+
+<pre><code> ifconfig
+</code></pre>
+
+<blockquote><p>  3.电脑确定和android 联通，</p></blockquote>
+
+<pre><code>   adb connect androidip
+</code></pre>
+
+<h3>adb 修改system权限</h3>
+
+<pre><code> adb shell
+
+ mount -o remount rw /system
+</code></pre>
+
+<h3>查看kernel log 信息</h3>
+
+<pre><code>cat /proc/kmsg
+
+dmesg
+</code></pre>
+
+<h3>修改系统默认java</h3>
+
+<pre><code>sudo update-alternatives --config java
+</code></pre>
+
+<h3>启动调试功能</h3>
+
+<pre><code> Add this to /system/build.prop: persist.service.adb.enable=1
+</code></pre>
+
+<h3>打印输入设备</h3>
+
+<pre><code>cat /proc/bus/input/devices  #打印连接到android的输入设备；
+</code></pre>
+
+<h3>安装apk</h3>
+
+<pre><code> adb push ***.apk  /system/app/ (当成系统应用安装)
+ adb install ***.apk   (安装在data/com****中)
+</code></pre>
+
+<h3>pc和盒子数据交换</h3>
+
+<pre><code> adb push
+ adb pull
+</code></pre>
+
+<hr>
+</div>
+ </div>
+</div>
+</div>
+
+<script src="https://s.tbcdn.cn/g/fi/bui/jquery-1.8.1.min.js"></script>
+<script src="https://s.tbcdn.cn/g/fi/bui/seed-min.js?t=201212261326"></script>
+<script src="../assets/js/config.js"></script>
+<script>
+    BUI.use('common/page', function (Page) {
+        new Page().init();
+    });
+</script>
+</body>
+</html>

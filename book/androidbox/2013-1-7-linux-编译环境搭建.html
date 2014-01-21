@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta http-equiv="content-language" content="zh-cn" />
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <meta name="author" content="Mr.xia" />
+  <meta name="description" content="硬件" />
+  <meta name="keywords" content="硬件,个人站点,博客,编程" />
+  <title>懿心</title>
+  <!--link href="/rss.xml" rel="alternate" title="Mr.xia" type="application/atom+xml" /-->
+  <link rel="icon" type="image/png" href="/img/favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="favicon.ico" type="image/x-icon" rel="shortcut icon">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/dpl-min.css" rel="stylesheet">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/bui-min.css" rel="stylesheet">
+    <link href="../assets/css/prettify.css" rel="stylesheet">
+    <link href="../assets/css/page.css" rel="stylesheet">
+    <script type="text/javascript" src="../assets/js/prettify.js"></script>
+</head>
+<body>
+
+		<div class="container">
+ 
+   <div class="col-xs-12 col-sm-8 col-md-8">
+	  <div class="panel panel-default">
+	    <div class="panel-body">
+
+
+<hr>
+<h1>android 源码开发环境搭建</h1>
+
+
+
+
+<div class="intro-wraper">
+    <img class="intro-img" src="../assets/img/adb_cmd.jpg"/>
+
+    <div class="introduce">
+        <h2>导引</h2>
+
+        <p>关于android开发环境</p>
+        <ol>
+            <li>环境介绍</li>
+            <li>环境搭建</li>
+         </ol>
+        <ul class="intro-level">
+            <li><span>难度：</span>简单</li>
+            <li><span>版本：</span>1.0</li>
+        </ul>
+    </div>
+</div>
+
+
+<h2>系统环境介绍</h2>
+
+<p>  因为是很久前搭建的，所以这里之介绍一下大概所需的东西。</p>
+
+<pre><code>      系统：           ubuntu 12.04
+      交叉编译器：     gcc,g++ 4.6
+      脚本编译器：     make,bash
+      java版本 ：     java1.6
+      lib32    :      64位不能编译android需要32位的包
+</code></pre>
+
+<h2>杨梅派盒子环境搭建</h2>
+
+<h3>编译</h3>
+
+<p>   首先要得到源代码(购买杨梅派盒子送源代码)：</p>
+
+<p>   其中有两个一个kernel，另一个android jb sdk。</p>
+
+<pre><code>     mkdir img
+     sudo mount -o loop source.img img
+     sudo umount img
+</code></pre>
+
+<p>为了节省空间，杨梅派给的是img文件的源码，将其挂载到img目录，然后将挂载的目录考出，就得到了源代码。
+  编译过程也很简单，杨梅派公司已经给出了编译脚本。拷贝完后应该有两个文件夹，jb，kernel
+<img src="../assets/img/androidbox/sourcepicture.png" alt="souce" /></p>
+
+<p>目录应该是这样的，相对位置最好不要改变，如果改变了就该相应的脚本。</p>
+
+<p>   编译：</p>
+
+<pre><code>      chmod u+x ./mk.sh
+      sudo ./mk.sh
+</code></pre>
+
+<p>   如果你直接编译过了你就是神，安装一下包(杨梅派源代码 ubuntu32位系统是很难编译过的，所以最好使用64位系统，如果你足够自信也可以尝试一下32位系统)</p>
+
+<pre><code>    sudo apt-get install git-core gnupg flex bison gperf build-essential \
+    zip curl zlib1g-dev libc6-dev lib32ncurses5-dev ia32-libs \
+    x11proto-core-dev libx11-dev lib32readline5-dev lib32z-dev \
+    libgl1-mesa-dev g++-multilib mingw32 tofrodos python-markdown \
+    libxml2-utils xsltproc
+</code></pre>
+
+<p>   java环境
+ <a href="http://pan.baidu.com/share/link?shareid=1488894166&amp;uk=672642936&amp;fid=2490253514">下载jdk-6u14-linux-i586.bin</a></p>
+
+<pre><code>     chmod  u+x  ./jdk-6u14-linux-i586.bin
+     mkdir  /usr/java
+     cp  -fr  ./jdk-6  /usr/java
+</code></pre>
+
+<p>如果将解压后的jdk考入usr中就不用导入环境变量，如果是自己的目录，则在~/.bashrc 或者/etc/profile中加入路径，为了考虑不同情况使用不同的java 版本，我们也可以写自己的脚本，如下：</p>
+
+<pre><code>  #!/bin/bash
+ echo -e " set java evn "
+ export JAVA_HOME=/home/lezhixing/env/jdk1.6.0_14
+ export PATH=$JAVA_HOME/bin:$PATH
+ export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+ export ANDROID_JAVA_HOME=$JAVA_HOME
+ echo -e "set android evn"
+ cd ./jb
+ source build/envsetup.sh
+
+ echo -e "change the system java evn"
+ sudo update-alternatives --config javac
+ sudo update-alternatives --config java
+</code></pre>
+
+<p>剩下的问题一般都不大，如果源代码没问题的话，其中会遇到很多问题。基本都是缺少库的问题，遇到缺少什么就添加什么库</p>
+
+<h3>关于刷机</h3>
+
+<p>  如果编译通过会生成6个jb/rockdev/img中，其中boot misc recovery和启动刷机有关，制作刷机包需要研究这三个文件。
+  kernel是linux内核编译后的文件，system是android  /system 的目录文件  通过瑞芯微的打包参数不难看出，串口信息
+  是打印在ttyFIQ0上的，然后update.img 包从0x620000..位开始读取开机脚本 initrd。</p>
+
+<pre><code> CMDLINE:console=ttyFIQ0 androidboot.console=ttyFIQ0 init=/init loglevel=8 initrd=0x62000000,0x00800000 mtdparts=rk29xxnand:0x00002000@0x00002000(misc),
+ 0x00006000@0x00004000(kernel),0x00006000@0x0000A000(boot),0x00008000@0x00010000(recovery),0x00120000@0x00018000(backup),0x00040000@0x00138000(cache),
+ 0x00300000@0x00178000(userdata),0x00002000@0x00478000(kpanic),0x00120000@0x0047A000(system),-@0x0059A000(user)
+</code></pre>
+
+<ul>
+<li>将编译完后的img 拷贝到windows下，
+<img src="../assets/img/androidbox/brash.png" alt="如图" /></li>
+</ul>
+
+
+<p>然后双击mkupdate.bat，生成update.img</p>
+
+<ul>
+<li>接入盒子，选择刷机包，刷机。</li>
+</ul>
+
+
+<h3>usb驱动</h3>
+
+<p>   有时候，电脑没有设备驱动，在ubuntu中，这样解决</p>
+
+<ul>
+<li><p>首先查看设备id</p>
+
+<pre><code>  lsusb
+
+  出现
+  Bus 002 Device 007: ID 18d1:4e21
+</code></pre></li>
+<li><p>添加配置文件</p>
+
+<pre><code>   sudo vim /etc/udev/rules.d/XXX.rules
+</code></pre></li>
+</ul>
+
+
+<blockquote><p>XXX为你自定义的文件名输入以下 内容</p>
+
+<p>SUBSYSTEM=="usb", SYSFS{"idVendor"}=="18d1", MODE="0666"</p>
+
+<p>在红色字体的部分 添加上 你 自己手机的id</p></blockquote>
+
+<pre><code>sudo chmod a+rx /etc/udev/rules.d/XXX.rules
+sudo /etc/init.d/udev restart
+</code></pre>
+
+<ul>
+<li><p>重启adb服务（必须为sudo 已配置android环境变量）</p>
+
+<pre><code>  sudo ./adb kill-server
+  sudo ./adb devices
+</code></pre></li>
+</ul>
+
+
+<hr>
+</div>
+ </div>
+</div>
+</div>
+
+<script src="https://s.tbcdn.cn/g/fi/bui/jquery-1.8.1.min.js"></script>
+<script src="https://s.tbcdn.cn/g/fi/bui/seed-min.js?t=201212261326"></script>
+<script src="../assets/js/config.js"></script>
+<script>
+    BUI.use('common/page', function (Page) {
+        new Page().init();
+    });
+</script>
+</body>
+</html>

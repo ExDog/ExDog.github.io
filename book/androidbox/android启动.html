@@ -1,0 +1,550 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-cn"><head><script src="android%E5%90%AF%E5%8A%A8_files/ga.js" async="" type="text/javascript"></script><script src="android%E5%90%AF%E5%8A%A8_files/encoder.js" type="text/javascript"></script>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<link type="text/css" rel="stylesheet" href="android%E5%90%AF%E5%8A%A8_files/blog-common.css">
+<link id="MainCss" type="text/css" rel="stylesheet" href="android%E5%90%AF%E5%8A%A8_files/style.css">
+<link title="RSS" type="application/rss+xml" rel="alternate" href="http://www.cnblogs.com/bastard/rss">
+<link title="RSD" type="application/rsd+xml" rel="EditURI" href="http://www.cnblogs.com/bastard/rsd.xml">
+<link type="application/wlwmanifest+xml" rel="wlwmanifest" href="http://www.cnblogs.com/bastard/wlwmanifest.xml">
+<script src="android%E5%90%AF%E5%8A%A8_files/jquery.js" type="text/javascript"></script>  
+<script type="text/javascript">var currentBlogApp = 'bastard';</script>
+<script src="android%E5%90%AF%E5%8A%A8_files/blog-common.js" type="text/javascript"></script>
+<link href="android%E5%90%AF%E5%8A%A8_files/shadow.css" id="SL_resources" rel="stylesheet" type="text/css"></head>
+<body>
+<a name="top"></a>
+
+<!--done-->
+<div id="home">
+<div id="header">
+	<div id="blogTitle">
+
+<div id="main">
+	<div id="mainContent">
+	<div class="forFlow">
+
+		
+
+<!--done-->
+<div id="topics">
+	<div class="post">
+		<h1 class="postTitle">
+			<a id="cb_post_title_url" class="postTitle2" href="http://www.cnblogs.com/bastard/archive/2012/08/28/2660389.html">Android系统启动过程</a>
+		</h1>
+		<div class="clear"></div>
+		<div class="postBody">
+			<div id="cnblogs_post_body"><p><strong><span style="font-size: 14pt;">Android系统启动过程</span></strong></p>
+<p><strong><span style="font-size: 14pt;"><br></span></strong><span style="font-size: 14pt; color: #0000ff;">　　</span></p>
+<p><span style="font-size: 14pt;">&nbsp;</span></p>
+<p><strong><span style="font-size: 14pt;">一 Init进程的启动</span></strong></p>
+<p><span style="font-size: 16px;">　　init进程，它是一个由内核启动的用户级进程。内核自行启动（已经被载入内存，开始运行，</span></p>
+<p><span style="font-size: 16px;">并已初始化所有的设备驱动程序和数据结构等）之后，就通过启动一个用户级程序init的方式，完成引导进程。init始终是第一个进程。</span></p>
+<p><span style="font-size: 16px;">　　启动过程就是代码init.c中main函数执行过程：system\core\init\init.c</span></p>
+<p><span style="font-size: 16px;">在函数中执行了：文件夹建立，挂载，rc文件解析，属性设置，启动服务，执行动作，socket监听……</span></p>
+<p><span style="font-size: 16px;">下面看两个重要的过程：rc文件解析和服务启动。</span></p>
+<p><strong><span style="font-size: 16px;">1 rc文件解析</span></strong></p>
+<p><span style="font-size: 16px;">　　.rc文件是Android使用的初始化脚本文件 （System/Core/Init/readme.txt中有描述：</span></p>
+<p><span style="font-size: 16px;">four broad classes of statements which are <strong>Actions</strong>, <strong>Commands</strong>, <strong>Services</strong>, and <strong>Options</strong>.）</span></p>
+<p><span style="font-size: 16px;">　　其中Command 就是系统支持的一系列命令，如：export，hostname，mkdir，mount，等等，其中一部分是 linux 命令，</span></p>
+<p><span style="font-size: 16px;">还有一些是 android 添加的，如：class_start &lt;serviceclass&gt;： 启动服务，class_stop &lt;serviceclass&gt;：关闭服务，等等。</span></p>
+<p><span style="font-size: 16px;">　　其中Options是针对 Service 的选项的。</span></p>
+<p><span style="font-size: 16px;">系统初始化要触发的动作和要启动的服务及其各自属性都在rc脚本文件中定义。 具体看一下启动脚本：\system\core\rootdir\init.rc</span></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 在解析rc脚本文件时，将相应的类型放入各自的List中：</span></p>
+<p><span style="font-size: 16px;">　　\system\core\init\Init_parser.c&nbsp; ：init_parse_config_file( )存入到</span></p>
+<p><span style="font-size: 16px;">　　action_queue、&nbsp;&nbsp; action_list、 service_list中，解析过程可以看一下parse_config函数，类似状态机形式挺有意思。</span></p>
+<p><span style="font-size: 16px;">　　这其中包含了服务：adbd、servicemanager、vold、ril-daemon、debuggerd、surfaceflinger、zygote、media……</span></p>
+<p><strong><span style="font-size: 16px;">2 服务启动</span></strong></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 文件解析完成之后将service放入到service_list中。</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">文件解析完成之后将service放入到service_list中。</span></p>
+<p>&nbsp;　　\system\core\init\builtins.c</p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color: #0000ff;">Service的启动是在do_class_start函数中完成：</span></span></p>
+<div class="cnblogs_code">
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">int</span> do_class_start(<span style="color: #0000ff;">int</span> nargs, <span style="color: #0000ff;">char</span> **<span style="color: #000000;">args)
+{
+    service_for_each_class(args[</span><span style="color: #800080;">1</span><span style="color: #000000;">], service_start_if_not_disabled);
+    </span><span style="color: #0000ff;">return</span> <span style="color: #800080;">0</span><span style="color: #000000;">;
+}</span></span></pre>
+</div>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">遍历所有名称为classname，状态不为SVC_DISABLED的Service启动</span></p>
+<p>&nbsp;</p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">void</span> service_for_each_class(<span style="color: #0000ff;">const</span> <span style="color: #0000ff;">char</span> *<span style="color: #000000;">classname,
+                            </span><span style="color: #0000ff;">void</span> (*func)(<span style="color: #0000ff;">struct</span> service *<span style="color: #000000;">svc))
+{
+       ……
+}
+
+</span><span style="color: #0000ff;">static</span> <span style="color: #0000ff;">void</span> service_start_if_not_disabled(<span style="color: #0000ff;">struct</span> service *<span style="color: #000000;">svc)
+{
+    </span><span style="color: #0000ff;">if</span> (!(svc-&gt;flags &amp;<span style="color: #000000;"> SVC_DISABLED)) {
+        service_start(svc, NULL);
+    }
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px; color: #0000ff;">do_class_start对应的命令：</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">　　<span style="color: #0000ff;"><strong>KEYWORD(class_start, COMMAND, 1, do_class_start)</strong></span></span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">init.rc文件中搜索<strong>class_start</strong>：class_start main 、class_start core、……</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">　　main、core即为do_class_start参数classname</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px; color: #0000ff;">init.rc文件中Service class名称都是main：</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; service drm /system/bin/drmserver</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">　　　　class <strong>main</strong></span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">　　service surfaceflinger /system/bin/surfaceflinger</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp; 　　　class <strong>main</strong></span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">于是就能够通过main名称遍历到所有的Service，将其启动。</span></p>
+<p><span style="font-size: 16px; color: #0000ff;">do_class_start调用：</span></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; init.rc中</span></p>
+<p><span style="font-size: 16px;">　　　　on boot　　//<span style="color: #0000ff;">action</span></span></p>
+<p><span style="font-size: 16px;">　　　　　　class_start core　　　　//执行<span style="color: #0000ff;">command 对应&nbsp;<span>do_class_start</span></span></span></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp; 　　　　 &nbsp;class_start main</span></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><span style="font-size: 16px; color: #0000ff;">Init进程main函数中：</span></p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">system/core/init/init.c中：</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">int</span><span style="color: #000000;"> main(){<br></span></span></pre>
+<p>　　　<span style="font-size: 15px;">　　//挂在文件</span></p>
+<p><span style="font-size: 15px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; //解析配置文件：init.rc……</span></p>
+<p><span style="font-size: 15px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; //初始化化action queue</span></p>
+<pre><span style="font-size: 15px;"><span style="color: #000000;">　　　　 <span style="font-size: 16px;">……
+       </span></span><span style="color: #0000ff;">for</span><span style="color: #000000;">(;;){
+
+              execute_one_command();
+
+              restart_processes();
+
+              </span><span style="color: #0000ff;">for</span> (i = <span style="color: #800080;">0</span>; i &lt; fd_count; i++<span style="color: #000000;">) {
+
+            </span><span style="color: #0000ff;">if</span> (ufds[i].revents ==<span style="color: #000000;"> POLLIN) {
+
+                </span><span style="color: #0000ff;">if</span> (ufds[i].fd ==<span style="color: #000000;"> get_property_set_fd())
+
+                    handle_property_set_fd();
+
+                </span><span style="color: #0000ff;">else</span> <span style="color: #0000ff;">if</span> (ufds[i].fd ==<span style="color: #000000;"> get_keychord_fd())
+
+                    handle_keychord();
+
+                </span><span style="color: #0000ff;">else</span> <span style="color: #0000ff;">if</span> (ufds[i].fd ==<span style="color: #000000;"> get_signal_fd())
+
+                    handle_signal();
+            }
+        }
+
+       }
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">　　循环调用<strong>service_start</strong>，将状态SVC_RESTARTING启动， 将启动后的service状态设置为SVC_RUNNING。</span></p>
+<p><span style="font-size: 16px;">　　pid=fork();</span></p>
+<p><span style="font-size: 16px;">　　execve();</span></p>
+<p><span style="font-size: 16px;">　　<span style="color: #0000ff;">在消息循环中：Init进程执行了Android的Command，启动了Android的NativeService，监听Service的变化需求，Signal处理。</span></span></p>
+<p><span style="font-size: 16px; color: #0000ff;">Init进程是作为属性服务（Property service），维护这些NativeService。</span></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><strong><span style="font-size: 14pt;">二 ServiceManager启动</span></strong></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 在.rc脚本文件中zygote的描述：</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;">service servicemanager /system/bin/<span style="color: #000000;">servicemanager
+　　</span><span style="color: #0000ff;">class</span><span style="color: #000000;"> core
+　　user system
+　　group system
+　　critical
+　　onrestart restart zygote
+　　onrestart restart media
+　　onrestart restart surfaceflinger
+　　onrestart restart drm</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color: #0000ff;">ServiceManager用来管理系统中所有的binder service，不管是本地的c++实现的还是java语言实现的都需要</span></span></p>
+<p><span style="font-size: 16px; color: #0000ff;">这个进程来统一管理，最主要的管理就是，注册添加服务，获取服务。所有的Service使用前都必须先在servicemanager中进行注册。</span></p>
+<p><span style="font-size: 16px;">　　<strong>do_find_service</strong>( )</span></p>
+<p><span style="font-size: 16px;">　　<strong>do_add_service</strong>( )</span></p>
+<p><span style="font-size: 16px;">　　svcmgr_handler( )</span></p>
+<p><span style="font-size: 16px;">　　代码位置：frameworks\base\cmds\servicemanager\Service_manager.c</span></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><strong><span style="font-size: 14pt;">三 Zygote进程的启动</span></strong></p>
+<p><span style="font-size: 16px;">　　Zygote这个进程是非常重要的一个进程，Zygote进程的建立是真正的Android运行空间，初始化建立的Service都是Navtive service.</span></p>
+<p><span style="font-size: 16px;"><strong>（1） 在.rc脚本文件中zygote的描述</strong>：</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;">service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-<span style="color: #000000;">server
+　　</span><span style="color: #0000ff;">class</span><span style="color: #000000;"> main
+　　socket zygote stream </span>666<span style="color: #000000;">
+　　onrestart write </span>/sys/android_power/<span style="color: #000000;">request_state wake
+　　onrestart write </span>/sys/power/<span style="color: #000000;">state on
+　　onrestart restart media
+　　onrestart restart netd
+
+参数：</span>--zygote --start-system-server</span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">代码位置：frameworks/base/cmds/app_process/app_main.cpp</span></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color: #0000ff;">上面的参数在这里就会用上，决定是否要启动和启动那些进程。</span></span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">int</span><span style="color: #000000;"> main( ){
+       AppRuntime runtime;
+       </span><span style="color: #0000ff;">if</span><span style="color: #000000;"> (zygote) {
+              <strong>runtime.start(</strong></span><strong>"com.android.internal.os.ZygoteInit"<span style="color: #000000;">,
+                startSystemServer </span>? "start-system-server" : ""</strong><span style="color: #000000;"><strong>);</strong>
+       }
+}
+
+</span><span style="color: #0000ff;">class</span> AppRuntime : <span style="color: #0000ff;">public</span> AndroidRuntime{}；</span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><strong><span style="font-size: 16px;">（2） 接着到了AndroidRuntime类中：</span></strong></p>
+<p><span style="font-size: 16px;">frameworks\base\core\<strong>jni</strong>\AndroidRuntime.cpp</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">void</span> start(<span style="color: #0000ff;">const</span> <span style="color: #0000ff;">char</span>* className, <span style="color: #0000ff;">const</span> <span style="color: #0000ff;">char</span>*<span style="color: #000000;"> options){
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> start the virtual machine Java在虚拟机中运行的</span><span style="color: #000000;">
+       JNIEnv</span>*<span style="color: #000000;"> env;
+       </span><span style="color: #0000ff;">if</span> (startVm(&amp;mJavaVM, &amp;env) != 0<span style="color: #000000;">) {
+              </span><span style="color: #0000ff;">return</span><span style="color: #000000;">;
+       }
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">向刚刚新建的虚拟机注册JNI本地接口</span>
+       <span style="color: #0000ff;">if</span> (startReg(env) &lt; 0<span style="color: #000000;">) {
+              </span><span style="color: #0000ff;">return</span><span style="color: #000000;">;
+       }
+
+　　　　</span><span style="color: #008000;">//</span><span style="color: #008000;"> jni 调用 java 方法，获取对应类的静态main方法</span><span style="color: #000000;">
+　　　　jmethodID startMeth </span>= env-&gt;<span style="color: #000000;">GetStaticMethodID(startClass,
+       　　</span>"main","([Ljava/lang/String;)V"<span style="color: #000000;">);
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> jni调用 java方法，调用到ZygoteInit类的main函数</span>
+<span style="color: #000000;">
+       jclass startClass </span>= env-&gt;<span style="color: #000000;">FindClass(className);
+
+       env</span>-&gt;<span style="color: #000000;">CallStaticVoidMethod(startClass, startMeth, strArray);
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><strong><span style="font-size: 16px; color: #0000ff;">　　到了ZygoteInit.java中的静态main函数中，从C++ ——》JAVA</span></strong></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><strong><span style="font-size: 16px;">（3）ZygoteInit</span></strong></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 真正Zygote进程:</span></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+frameworks\base\core\java\com\android\internal\os\ZygoteInit.java</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 14px;"><span style="color: #0000ff;">public</span> <span style="color: #0000ff;">static</span> <span style="color: #0000ff;">void</span><span style="color: #000000;"> main(String argv[]) {
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">Registers a server socket for zygote command connections</span><span style="color: #000000;">
+       registerZygoteSocket();
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">Loads and initializes commonly used classes and
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">used resources that can be shared across processes</span><span style="color: #000000;">
+       preload();
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> Do an initial gc to clean up after startup</span><span style="color: #000000;">
+       gc();
+
+       </span><span style="color: #0000ff;">if</span> (argv[1].equals("start-system-server"<span style="color: #000000;">)) {
+              startSystemServer();
+       }<br>
+       </span><span style="color: #008000;">/**</span><span style="color: #008000;">
+       * Runs the zygote process's select loop. Accepts new connections as
+       * they happen, and reads commands from connections one spawn-request's
+       * worth at a time.
+       </span><span style="color: #008000;">*/</span><span style="color: #000000;">
+
+       runSelectLoopMode();    </span><span style="color: #008000;">//</span><span style="color: #008000;">loop中</span>
+       <span style="color: #008000;">/**</span><span style="color: #008000;">
+       * Close and clean up zygote sockets. Called on shutdown and on the
+       * child's exit path.
+       </span><span style="color: #008000;">*/</span><span style="color: #000000;">
+       closeServerSocket();
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #0000ff;"><strong> Zygote就建立好了，利用Socket通讯，接收请求，Fork应用程序进程，进入Zygote进程服务框架中。</strong></span></span></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><strong><span style="font-size: 14pt;">四 SystemServer启动</span></strong></p>
+<p><span style="font-size: 16px;">（1）在Zygote进程进入循环之前，调用了startSystemServer( );</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 14px;"><span style="font-size: 15px;"><span style="color: #0000ff;">private</span> <span style="color: #0000ff;">static</span> <span style="color: #0000ff;">boolean</span><span style="color: #000000;"> startSystemServer(){
+       </span><span style="color: #008000;">/*</span><span style="color: #008000;"> Request to fork the system server process 孵化新的进程 </span><span style="color: #008000;">*/</span><span style="color: #000000;">
+　　　　ZygoteConnection.Arguments parsedArgs </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+       pid </span>=<span style="color: #000000;"> Zygote.forkSystemServer(
+              parsedArgs.uid, parsedArgs.gid,
+              parsedArgs.gids,
+              parsedArgs.debugFlags,
+              </span><span style="color: #0000ff;">null</span><span style="color: #000000;">,
+              parsedArgs.permittedCapabilities,
+              parsedArgs.effectiveCapabilities);
+ 
+              </span><span style="color: #008000;">/*</span><span style="color: #008000;"> For child process 对新的子进程设置 </span><span style="color: #008000;">*/</span>
+       <span style="color: #0000ff;">if</span> (pid == 0<span style="color: #000000;">) {
+              handleSystemServerProcess(parsedArgs);
+       }
+}
+
+</span><span style="color: #0000ff;">void</span><span style="color: #000000;"> handleSystemServerProcess(parsedArgs){
+       closeServerSocket();
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">"system_server"</span><span style="color: #000000;">
+       Process.setArgV0(parsedArgs.niceName);
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">Pass the remaining arguments to SystemServer.</span><span style="color: #000000;">
+　　　　RuntimeInit.zygoteInit(parsedArgs.targetSdkVersion,
+　　　　　　parsedArgs.remainingArgs);
+       </span><span style="color: #008000;">/*</span><span style="color: #008000;"> should never reach here </span><span style="color: #008000;">*/</span><span style="color: #000000;">
+}</span></span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><strong><span style="font-size: 16px;">（2）RuntimeInit中：</span></strong></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; frameworks\base\core\java\com\android\internal\os\RuntimeInit.java</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #008000;">//</span><span style="color: #008000;">The main function called when started through the zygote process.</span>
+<span style="color: #0000ff;">void</span> zygoteInit(<span style="color: #0000ff;">int</span><span style="color: #000000;"> targetSdkVersion, String[] argv){
+        applicationInit(targetSdkVersion, argv);
+}
+
+</span><span style="color: #0000ff;">void</span> applicationInit(<span style="color: #0000ff;">int</span><span style="color: #000000;"> targetSdkVersion, String[] argv){
+    </span><span style="color: #008000;">//</span><span style="color: #008000;"> Remaining arguments are passed to the start class's static main</span><span style="color: #000000;">
+    invokeStaticMain(args.startClass, args.startArgs);
+}<br>
+</span><span style="color: #0000ff;">void</span><span style="color: #000000;"> invokeStaticMain(String className, String[] argv){
+    Class</span>&lt;?&gt;<span style="color: #000000;"> cl;
+    cl </span>=<span style="color: #000000;"> Class.forName(className);
+ 
+    </span><span style="color: #008000;">//</span><span style="color: #008000;">获取SystemServer的main方法，抛出MethodAndArgsCaller异常</span><span style="color: #000000;">
+    Method m;
+    m </span>= cl.getMethod("main", <span style="color: #0000ff;">new</span> Class[] { String[].<span style="color: #0000ff;">class</span><span style="color: #000000;"> });
+    </span><span style="color: #0000ff;">int</span> modifiers =<span style="color: #000000;"> m.getModifiers();
+    </span><span style="color: #0000ff;">throw</span> <span style="color: #0000ff;">new</span><span style="color: #000000;"> ZygoteInit.MethodAndArgsCaller(m, argv);
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;"><strong>（3）</strong>从<strong>startSystemServer</strong>开始执行并没有去调用SystemServer的任何方法，</span></p>
+<p><span style="font-size: 16px;">　　　　只是通过反射获取了main方法，付给了MethodAndArgsCaller，并抛出了</span><span style="font-size: 16px;">MethodAndArgsCaller异常。</span></p>
+<p><span style="font-size: 16px;">　　　　此异常是在哪里处理的呢？</span></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 回到startSystemServer( )函数的调用处：</span></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 在ZygoteInit的main函数中：</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">public</span> <span style="color: #0000ff;">static</span> <span style="color: #0000ff;">void</span><span style="color: #000000;"> main(String argv[]) {
+       </span><span style="color: #0000ff;">try</span><span style="color: #000000;"> {
+              ……
+              </span><span style="color: #0000ff;">if</span> (argv[1].equals("start-system-server"<span style="color: #000000;">)) {
+                  startSystemServer();       </span><span style="color: #008000;">//</span><span style="color: #008000;">这里如果抛出异常，跳过下面流程</span><span style="color: #000000;">
+              }
+          
+　　　　　　　　runSelectLoopMode();    </span><span style="color: #008000;">//</span><span style="color: #008000;">loop中</span><span style="color: #000000;">
+              ……
+
+
+       } </span><span style="color: #0000ff;">catch</span><span style="color: #000000;"> (MethodAndArgsCaller caller) {
+              caller.run();        </span><span style="color: #008000;">//</span><span style="color: #008000;">处理的异常</span><span style="color: #000000;">
+       }
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">　　如果startSystemServer抛出了异常，跳过执行ZygoteInit进程的循环，这是怎么回事呢？</span></p>
+<p><span style="font-size: 16px;">　<span style="color: #0000ff;">　在startSystemServer中异常是由handleSystemServerProcess抛出，而</span></span></p>
+<p><span style="font-size: 16px; color: #0000ff;">　　　　　　pid = Zygote.<strong>forkSystemServer</strong>( )</span></p>
+<p><span style="font-size: 16px; color: #0000ff;">　　　　　　/* For child process 仅对新的子进程设置 */</span></p>
+<p><span style="font-size: 16px; color: #0000ff;">　　　　　　if (pid == 0) {</span></p>
+<p><span style="font-size: 16px; color: #0000ff;"><strong>　　　　　　　　handleSystemServerProcess</strong>(parsedArgs);</span></p>
+<p><span style="font-size: 16px; color: #0000ff;">　　　　　　}</span></p>
+<p><span style="font-size: 16px; color: #0000ff;">　　　　　　// Zygote.<strong>forkSystemServer</strong>根据参数fork 出一个子进程，若成功调用，则返回两次：</span></p>
+<p><span style="font-size: 16px; color: #0000ff;">　　　　一次返回的是 zygote 进程的 pid ，值大于0；一次返回的是子进程 pid，值等于0否则，出错返回-1；</span></p>
+<p><span style="font-size: 16px;"><strong>　　caller</strong>.<strong>run</strong>();</span></p>
+<p><span style="font-size: 16px;">　　　　MethodAndArgsCaller run函数：调用前面所提到的</span></p>
+<p><span style="font-size: 16px;">　　　　//SystemServer main方法</span></p>
+<p><span style="font-size: 16px;">　　　　m = cl.getMethod("main", new Class[] { String[].class });</span></p>
+<p><span style="font-size: 16px;">　　　　启动了进程SystemServer。</span></p>
+<p><strong><span style="font-size: 16px;">（4）SystemServer的执行 init1( )</span></strong></p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ //frameworks\base\services\java\com\android\server\SystemServer.java</span></p>
+<p><span style="font-size: 16px;">&nbsp; &nbsp; &nbsp; &nbsp;</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">public</span> <span style="color: #0000ff;">static</span> <span style="color: #0000ff;">void</span><span style="color: #000000;"> main(String[] args) {
+
+       　　System.loadLibrary(</span>"android_servers"<span style="color: #000000;">);    
+
+       　　</span><span style="color: #008000;">/*</span><span style="color: #008000;">
+
+       　　* This method is called from Zygote to initialize the system.
+       　　* This will cause the native services (SurfaceFlinger, AudioFlinger, etc..)
+       　　* to be started. After that it will call back
+       　　* up into init2() to start the Android services.
+      　　 </span><span style="color: #008000;">*/</span><span style="color: #000000;">
+      　　 init1(args);    </span><span style="color: #008000;">//</span><span style="color: #008000;">native 完了回调init2( )</span><span style="color: #000000;">
+　　}
+
+</span><span style="color: #008000;">//</span><span style="color: #008000;">init1:</span><span style="color: #000000;">
+　　frameworks</span>/base/services/jni/<span style="color: #000000;">com_android_server_SystemServer.cpp:: android_server_SystemServer_init1( ) <br>　　中调用：system_init
+extern </span>"C"<span style="color: #000000;"> status_t system_init()
+{
+       sp</span>&lt;ProcessState&gt;<span style="color: #000000;"> proc(ProcessState::self());
+       sp</span>&lt;IServiceManager&gt; sm =<span style="color: #000000;"> defaultServiceManager();
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">启动SurfaceFlinger 和传感器</span><span style="color: #000000;">
+       property_get(</span>"system_init.startsurfaceflinger", propBuf, "1"<span style="color: #000000;">);
+       SurfaceFlinger::instantiate();
+
+       property_get(</span>"system_init.startsensorservice", propBuf, "1"<span style="color: #000000;">);
+       SensorService::instantiate();
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> And now start the Android runtime.  We have to do this bit
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> of nastiness because the Android runtime initialization requires
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> some of the core system services to already be started.
+　　　　</span><span style="color: #008000;">//</span><span style="color: #008000;"> All other servers should just start the Android runtime at
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> the beginning of their processes's main(), before calling
+       </span><span style="color: #008000;">//</span><span style="color: #008000;"> the init function.</span><span style="color: #000000;">
+       AndroidRuntime</span>* runtime =<span style="color: #000000;"> AndroidRuntime::getRuntime();
+
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">回调 com.android.server.SystemServer init2 方法      </span>
+<span style="color: #000000;">
+       JNIEnv</span>* env = runtime-&gt;<span style="color: #000000;">getJNIEnv();
+
+       jclass clazz </span>= env-&gt;FindClass("com/android/server/SystemServer"<span style="color: #000000;">);
+
+       jmethodID methodId </span>= env-&gt;GetStaticMethodID(clazz, "init2", "()V"<span style="color: #000000;">);
+
+       env</span>-&gt;<span style="color: #000000;">CallStaticVoidMethod(clazz, methodId);
+    
+
+       </span><span style="color: #008000;">//</span><span style="color: #008000;">启动线程池 做为binder 服务</span><span style="color: #000000;">
+       ProcessState::self()</span>-&gt;<span style="color: #000000;">startThreadPool();
+       IPCThreadState::self()</span>-&gt;<span style="color: #000000;">joinThreadPool();
+       </span><span style="color: #0000ff;">return</span><span style="color: #000000;"> NO_ERROR;
+
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><strong><span style="font-size: 16px; color: #0000ff;">ProcessState：</span></strong></p>
+<p><span style="font-size: 16px;">　　每个进程在使用binder 机制通信时，均需要维护一个ProcessState 实例来描述当前进程在binder 通信时的binder 状态。</span></p>
+<p><span style="font-size: 16px;">　　ProcessState 有如下2 个主要功能：</span></p>
+<p><span style="font-size: 16px;">　　1. 创建一个thread, 该线程负责与内核中的binder 模块进行通信，称该线程为Pool thread ；</span></p>
+<p><span style="font-size: 16px;">　　2. 为指定的handle 创建一个BpBinder 对象，并管理该进程中所有的BpBinder 对象。</span></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><span style="color: #0000ff;"><strong><span style="font-size: 16px;">Pool thread：</span></strong></span></p>
+<p><span style="font-size: 16px;">　　在Binder IPC 中，所有进程均会启动一个thread 来负责与BD 来直接通信，也就是不停的读写BD ，</span></p>
+<p><span style="font-size: 16px;">　　这个线程的实现主体是一个IPCThreadState 对象，下面会介绍这个类型。</span></p>
+<p><span style="font-size: 16px;">　　下面是Pool thread 的启动方式：</span></p>
+<p><span style="font-size: 16px;">　　ProcessState::self()-&gt;<strong>startThreadPool</strong>();</span></p>
+<p><span style="color: #0000ff;"><strong><span style="font-size: 16px;">IPCThreadState ：</span></strong></span></p>
+<p><span style="font-size: 16px;">　　IPCThreadState 也是以单例模式设计的。由于每个进程只维护了一个ProcessState 实例，同时ProcessState 只启动一个Pool thread ，</span></p>
+<p><span style="font-size: 16px;">也就是说每一个进程只会启动一个Pool thread ，因此每个进程则只需要一个IPCThreadState 即可。</span></p>
+<p><span style="font-size: 16px;">Pool thread 的实际内容则为：</span></p>
+<p><span style="font-size: 16px;">IPCThreadState::self()-&gt;<strong>joinThreadPool</strong>();</span></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><strong><span style="font-size: 16px;">（5）SystemServer的执行 init2( )</span></strong></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"><span style="color: #0000ff;">public</span> <span style="color: #0000ff;">static</span> <span style="color: #0000ff;">final</span> <span style="color: #0000ff;">void</span><span style="color: #000000;"> init2() {   
+　　　　</span><span style="color: #008000;">//</span><span style="color: #008000;">建立线程来处理</span><span style="color: #000000;">
+       Thread thr </span>= <span style="color: #0000ff;">new</span><span style="color: #000000;"> ServerThread();      
+       thr.setName(</span>"android.server.ServerThread"<span style="color: #000000;">);
+       thr.start();
+}
+
+<span style="color: #0000ff;"><strong>//看看线程ServerThread里面都做了什么事情？
+</strong></span></span><span style="color: #0000ff;">public</span> <span style="color: #0000ff;">void</span><span style="color: #000000;"> run() {
+    addBootEvent(</span><span style="color: #0000ff;">new</span> String("Android:SysServerInit_START"<span style="color: #000000;">));
+    Looper.prepare();
+    android.os.Process.setThreadPriority(
+    android.os.Process.THREAD_PRIORITY_FOREGROUND);
+
+    </span><span style="color: #008000;">//</span><span style="color: #008000;">初始化服务，创建各种服务实例，如：电源、网络、Wifi、蓝牙，USB等，
+</span><span style="color: #008000;">　　//</span><span style="color: #008000;">初始化完成以后加入到 ServiceManager中，
+    </span><span style="color: #008000;">//</span><span style="color: #008000;">事我们用 Context.getSystemService (String name) 才获取到相应的服务</span><span style="color: #000000;">
+    PowerManagerService power </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    NetworkManagementService networkManagement </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    WifiP2pService wifiP2p </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    WindowManagerService wm </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    BluetoothService bluetooth </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    UsbService usb </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    NotificationManagerService notification </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    StatusBarManagerService statusBar </span>= <span style="color: #0000ff;">null</span><span style="color: #000000;">;
+    ……<br>
+    power </span>= <span style="color: #0000ff;">new</span><span style="color: #000000;"> PowerManagerService();
+    ServiceManager.addService(Context.POWER_SERVICE, power);
+    ……
+
+    </span><span style="color: #008000;">//</span><span style="color: #008000;"> ActivityManagerService作为ApplicationFramework最重要的服务</span><span style="color: #000000;">
+    ActivityManagerService.setSystemProcess();
+    ActivityManagerService.installSystemProviders();
+    ActivityManagerService.self().setWindowManager(wm);   
+　　</span><span style="color: #008000;">//</span><span style="color: #008000;"> We now tell the activity manager it is okay to run third party
+</span><span style="color: #008000;">　　//</span><span style="color: #008000;"> code.  It will call back into us once it has gotten to the state
+</span><span style="color: #008000;">　　//</span><span style="color: #008000;"> where third party code can really run (but before it has actually
+</span><span style="color: #008000;">　　//</span><span style="color: #008000;"> started launching the initial applications), for us to complete our
+</span><span style="color: #008000;">　　//</span><span style="color: #008000;"> initialization.
+</span><span style="color: #008000;">　　//</span><span style="color: #008000;">系统服务初始化准备就绪，通知各个模块</span><span style="color: #000000;">
+    ActivityManagerService.self().systemReady(</span><span style="color: #0000ff;">new</span><span style="color: #000000;"> Runnable() {
+
+           </span><span style="color: #0000ff;">public</span> <span style="color: #0000ff;">void</span><span style="color: #000000;"> run() {
+                  startSystemUi(contextF);
+                  batteryF.systemReady();
+                  networkManagementF.systemReady();
+                  usbF.systemReady();
+                  ……
+
+                  </span><span style="color: #008000;">//</span><span style="color: #008000;"> It is now okay to let the various system services start their
+                  </span><span style="color: #008000;">//</span><span style="color: #008000;"> third party code...</span><span style="color: #000000;">
+                  appWidgetF.systemReady(safeMode);
+                  wallpaperF.systemReady();
+           }
+    });
+
+    </span><span style="color: #008000;">//</span>
+    <span style="color: #008000;">//</span><span style="color: #008000;">BOOTPROF</span><span style="color: #000000;">
+    addBootEvent(</span><span style="color: #0000ff;">new</span> String("Android:SysServerInit_END"<span style="color: #000000;">));
+    Looper.loop();
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">&nbsp;　　</span><span style="font-size: 16px; color: #0000ff;">到这里系统ApplicationFramework层的XxxServiceManager准备就绪，可以开始跑上层应用了，我们的第一个上层应用HomeLauncher。</span></p>
+<p><span style="font-size: 16px;">　　HomeActivity又是如何启动的呢？</span></p>
+<p><span style="font-size: 16px;">　　Activity的启动必然和ActivityManagerService有关，我们需要去看看</span></p>
+<p><span style="font-size: 16px;">　　ActivityManagerService.systemReady( )中都干了些什么。</span></p>
+<p><span style="font-size: 16px;">&nbsp;</span></p>
+<p><strong><span style="font-size: 14pt;">五 Home界面启动</span></strong></p>
+<p><span style="font-size: 16px;">&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;</span></p>
+<div class="cnblogs_code"><div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div>
+<pre><span style="font-size: 15px;"> <span style="color: #0000ff;">public</span> <span style="color: #0000ff;">void</span> systemReady(<span style="color: #0000ff;">final</span><span style="color: #000000;"> Runnable goingCallback) {
+　　　　……
+</span><span style="color: #008000;">　　　　//</span><span style="color: #008000;">ready callback</span>
+       <span style="color: #0000ff;">if</span> (goingCallback != <span style="color: #0000ff;">null</span><span style="color: #000000;">)
+              goingCallback.run();<br>
+       </span><span style="color: #0000ff;">synchronized</span> (<span style="color: #0000ff;">this</span><span style="color: #000000;">) {
+              </span><span style="color: #008000;">//</span><span style="color: #008000;"> Start up initial activity.
+              </span><span style="color: #008000;">//</span><span style="color: #008000;"> ActivityStack mMainStack;</span><span style="color: #000000;">
+              mMainStack.resumeTopActivityLocked(</span><span style="color: #0000ff;">null</span><span style="color: #000000;">);
+       }
+……
+
+}
+
+</span><span style="color: #0000ff;">final</span> <span style="color: #0000ff;">boolean</span><span style="color: #000000;"> resumeTopActivityLocked(ActivityRecord prev) {
+　　</span><span style="color: #008000;">//</span><span style="color: #008000;"> Find the first activity that is not finishing.</span><span style="color: #000000;">
+　　ActivityRecord next </span>= topRunningActivityLocked(<span style="color: #0000ff;">null</span><span style="color: #000000;">);
+　　</span><span style="color: #0000ff;">if</span> (next == <span style="color: #0000ff;">null</span><span style="color: #000000;">) {
+</span><span style="color: #008000;">　　　　//</span><span style="color: #008000;"> There are no more activities!  Let's just start up the
+　　　　</span><span style="color: #008000;">//</span><span style="color: #008000;"> Launcher...</span>
+　　　　<span style="color: #0000ff;">if</span><span style="color: #000000;"> (mMainStack) {
+　　　　　　</span><span style="color: #008000;">//</span><span style="color: #008000;">ActivityManagerService mService;</span>
+　　　　　　<span style="color: #0000ff;">return</span><span style="color: #000000;"> mService.startHomeActivityLocked();
+　　　　}
+　　}
+　　……
+}</span></span></pre>
+<div class="cnblogs_code_toolbar"><span class="cnblogs_code_copy"><a href="javascript:void(0);" onclick="copyCnblogsCode(this)" title="复制代码"><img src="android%E5%90%AF%E5%8A%A8_files/copycode.gif" alt="复制代码"></a></span></div></div>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p><span style="font-size: 16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 然后就启动了Home界面，完成了整个Android启动流程。</span></p>
+
+
+
+</body></html>

@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta http-equiv="content-language" content="zh-cn" />
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <meta name="author" content="Mr.xia" />
+  <meta name="description" content="硬件" />
+  <meta name="keywords" content="硬件,个人站点,博客,编程" />
+  <title>懿心</title>
+  <!--link href="/rss.xml" rel="alternate" title="Mr.xia" type="application/atom+xml" /-->
+  <link rel="icon" type="image/png" href="/img/favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="favicon.ico" type="image/x-icon" rel="shortcut icon">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/dpl-min.css" rel="stylesheet">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/bui-min.css" rel="stylesheet">
+    <link href="../assets/css/prettify.css" rel="stylesheet">
+    <link href="../assets/css/page.css" rel="stylesheet">
+    <script type="text/javascript" src="../assets/js/prettify.js"></script>
+</head>
+<body>
+
+		<div class="container">
+ 
+   <div class="col-xs-12 col-sm-8 col-md-8">
+	  <div class="panel panel-default">
+	    <div class="panel-body">
+
+
+<hr>
+<h1>single touch and multi touch</h1>
+
+
+
+
+<div class="intro-wraper">
+    <img class="intro-img" src="../assets/img/mult_touch.jpg"/>
+
+    <div class="introduce">
+        <h2>导引</h2>
+
+        <p>关于杨梅派盒子多点触控</p>
+        <ol>
+            <li>关于单点触控解决办法</li>
+            <li>关于多点触控解决办法</li>
+         </ol>
+        <ul class="intro-level">
+            <li><span>难度：</span>中等</li>
+            <li><span>版本：</span>1.0</li>
+        </ul>
+    </div>
+</div>
+
+
+<p>   从今年四月多开始，就开始接触android 底层，从制作刷机包，到友善之臂开发板-> 杨梅派A20 开发板-> 杨梅派Rk3006.差不多一年了，有成就，也有未完成的，也尝试过很多失败，但也收获很多。就里就把触屏解决方案整理一下。</p>
+
+<h2>单点触控(另类解决办法)</h2>
+
+<p>  刚开始接触开发速度很慢，kernel部分不会调试，sdk层，就通过打log来一步一步跟踪，因为插上触屏设备后，点击设备，只有中间会出现一个点，其他为反应，所以确定底层是可以上报数据的；
+  一开始是通过打log，后来通过google官网发现是有调试命令的。 <a href="http://exdog.github.io/posts/2013-09-16-android-%E8%B0%83%E8%AF%95.html">这里查看</a></p>
+
+<h3>获取底层上报数据</h3>
+
+<pre><code> adb shell
+ getevent   #打印出的以下第一组数据
+ getevent -lt  #以下第二组数据
+</code></pre>
+
+<p>   我们就分析部分数据</p>
+
+<pre><code>     1.这是后来补上去的鼠标的event，当初singletouch的还要改回去麻烦。大概原理是这样的
+    /dev/input/event4: 0002 0001 fffffffe
+    /dev/input/event4: 0000 0000 00000000
+    /dev/input/event4: 0002 0000 0000000a
+    /dev/input/event4: 0002 0001 fffffffd
+
+    2.
+    EV_ABS       ABS_X                000000bd
+</code></pre>
+
+<p>   前面怎样获取数据的我就不提了，可以看一下<a href="http://exdog.github.io/posts/2013-09-20-android-%E8%A7%A6%E5%B1%8F.html">这里</a></p>
+
+<h3>关于配置文件</h3>
+
+<p>关于配置文件，原来android 4.0 以后，设备是要有配置文件的，文件名字为设备名字.idc，是触屏和鼠标设备的，在/system/usr/idc，当然设备名字是需要翻译的
+    通过getevent -p 获取设备名字，空格用_代替，我没有去改这个，而是在读取设备的地方，直接读取一个死文件。后来发现这样很不灵活，4.0的设备还好，当杨梅派盒子升级到了4.2 触屏和鼠标就冲突了，
+    鼠标也读取该配置，导致不正常运作，每次切换鼠标的时候都得手动去删除一下那个配置文件，但是因为卖出去的设备都是内嵌到显示屏里面的，就不需要鼠标，所以就这样先改着了！关于设备配置文件，进入idc文件，
+    拷贝一个，然后改名就可以了，至少我至今为止没发现什么不同。</p>
+
+<h3>设备分析</h3>
+
+<p>打开  $ANDROIDSOURCE/frameworks/base/services/input/InputReader.cpp</p>
+
+<h4>设备类型创建</h4>
+
+<p>设备在底层上报的时候就知道自己的类型了，通过classes 去和INPUT_DEVICE_... 做于运算，来new 一个inputmapper，这里我们走的是  device->addMapper(new SingleTouchInputMapper(device));</p>
+
+<pre><code>InputDevice* InputReader::createDeviceLocked(int32_t deviceId,
+       const InputDeviceIdentifier&amp; identifier, uint32_t classes) {
+      InputDevice* device = new InputDevice(&amp;mContext, deviceId, bumpGenerationLocked(),
+        identifier, classes);
+
+   // External devices.
+   if (classes &amp; INPUT_DEVICE_CLASS_EXTERNAL) {
+       device-&gt;setExternal(true);
+   }
+   ......
+// Touchscreens and touchpad devices.
+if (classes &amp; INPUT_DEVICE_CLASS_TOUCH_MT) {
+    device-&gt;addMapper(new MultiTouchInputMapper(device));
+} else if (classes &amp; INPUT_DEVICE_CLASS_TOUCH) {
+    device-&gt;addMapper(new SingleTouchInputMapper(device));
+}
+</code></pre>
+
+<h4>数据类型</h4>
+
+<p>虽然是一个singletouch设备，但上报的数据type所匹配的是BTN_MOUSE,在这里获取的type 为0110,通过查看input.h 查看到宏定义为0110的是BTN_MOUSE,而下面没有这个设备，所以自己加上了。要加的地方分有</p>
+
+<p>*</p>
+
+<pre><code>    void TouchButtonAccumulator::process(const RawEvent* rawEvent) {
+        if (rawEvent-&gt;type == EV_KEY) {
+            switch (rawEvent-&gt;code) {
+            //以下两句是自己加的
+                case BTN_MOUSE:
+                    mBtnMouse=rawEvent-&gt;value;
+</code></pre>
+
+<p>*</p>
+
+<pre><code>    void TouchButtonAccumulator::reset(InputDevice* device) {
+         mBtnMouse=device-&gt;isKeyPressed(BTN_MOUSE);
+</code></pre>
+
+<p>*</p>
+
+<pre><code>    void TouchButtonAccumulator::clearButtons() {
+        mBtnMouse=0;
+</code></pre>
+
+<p>*</p>
+
+<pre><code>    bool TouchButtonAccumulator::isToolActive() const {
+      return  mBtnMouse||mBtnTouch || mBtnToolFinger || mBtnToolPen || mBtnToolRubber
+</code></pre>
+
+<ul>
+<li><p>5.在inputreader.h 中加入定义</p>
+
+<pre><code>  private:
+  bool mHaveBtnTouch;
+  bool mHaveStylus;
+  bool mBtnMouse;
+</code></pre></li>
+</ul>
+
+
+<h4>single process</h4>
+
+<p>走完了touch process方法筛选，其实那个方法就是确定你的设备是否isactive（以上方法4，怎么用以下再提）</p>
+
+<pre><code>     void SingleTouchMotionAccumulator::process(const RawEvent* rawEvent){
+         switch (rawEvent-&gt;code) {
+             case ABS_X:
+             mAbsX = rawEvent-&gt;value;
+             break;
+</code></pre>
+
+<p>没错，这里就是你看到的通过getevent获得的触点数据，既然x，y，都有了，而且坐标也正常，为什么还不正常呢。</p>
+
+<h3>消息分发前处理</h3>
+
+<h3>处理</h3>
+
+<p>在数据类型，以及数据捕获后，会调用sycn进行处理，然后就是回调上层的事件函数了。</p>
+
+<pre><code>void TouchInputMapper::sync(nsecs_t when) {
+
+      ...
+       syncTouch(when, &amp;havePointerIds);//调用自有的处理逻辑
+
+
+     ...
+        dispatchHoverExit(when, policyFlags);
+        dispatchTouches(when, policyFlags);
+        dispatchHoverEnterAndMove(when, policyFlags);
+</code></pre>
+
+<h3>singletouch sync处理</h3>
+
+<pre><code>void SingleTouchInputMapper::syncTouch(nsecs_t when, bool* outHavePointerIds) {
+if (mTouchButtonAccumulator.isToolActive()) {
+......
+ bool isHovering = mTouchButtonAccumulator.getToolType() != AMOTION_EVENT_TOOL_TYPE_MOUSE
+            &amp;&amp; (mTouchButtonAccumulator.isHovering()
+                    || (mRawPointerAxes.pressure.valid
+                            &amp;&amp; mSingleTouchMotionAccumulator.getAbsolutePressure() &lt;= 0));
+.....
+//mCurrentRawPointerData.markIdBit(0, isHovering);
+ mCurrentRawPointerData.markIdBit(0,false);  //这里是我的修改
+}
+</code></pre>
+
+<p>在这里你也许就明白了，第一步加设备的BTN_MOUSE的用意，因为没有设备，所以isToolActive不会调用里面的处理。是处理了后，设备点还是不对，
+这里就出现了一个概念，就是hovering 悬空，我们想一下，因为是当鼠标处理的，当你没有按下鼠标左键，只是在屏幕上有个鼠标在移动而已，只有左键按下后，才能左右拖动屏幕。
+于是我就把isHovering，强制让它不悬空，这样usbtouch设备在不修改内核的情况下，就能实现单点触控了。也许会遇到很多问题，但是因为是定制的，盒子也是镶嵌在内部的，所以很多其他设备问题就
+不用担心了。就我测试过很多触屏，和很多开发板，居然都可以如此解决。</p>
+
+<h2>多点触控解决</h2>
+
+<p>我原先就看过关于内核触屏驱动的很多资料，自己写驱动，感觉比较庞大的工程，因为没有写过，而且不知道怎么调试，光通过dmesg，也不是很会用。想通过修改驱动，以上能上报数据，说明是内核是有驱动的，只要将上报点类型修改一下。但是一直
+苦于找不到，对应的驱动，一直以为驱动会在kernel/drivers/input/touchscreen下，那么多驱动文件怎么找啊。后来狗血的发现驱动居然在 kernel/drivers/hid/下面</p>
+
+<h3>查找驱动</h3>
+
+<p>  连接好设备</p>
+
+<h4>设备目录</h4>
+
+<pre><code>        adb shell
+        cat /proc/bus/input/devices
+        #出现以下信息
+
+I: Bus=0003 Vendor=03fc Product=0588 Version=0100   //这个信息很重要，就是以后要说的vid，pid
+N: Name="Touch__KiT Touch  Computer INC."           //设备名称
+P: Phys=usb-usb20_host-1.1/input1
+S: Sysfs=/devices/platform/usb20_host/usb2/2-1/2-1.1/2-1.1:1.1/input/input5  //设备在sys目录下的位置
+U: Uniq=
+H: Handlers=event3
+B: PROP=0
+B: EV=100003
+B: KEY=0
+</code></pre>
+
+<h4>设备软链接</h4>
+
+<pre><code> cd /sys/devices/platform/usb20_host/usb2/2-1/2-1.1/2-1.1:1.1/input/input5
+ ll
+
+ #出现以下信息
+ drwxr-xr-x root     root              2000-01-01 09:44 capabilities
+ lrwxrwxrwx root     root              2000-01-01 09:44 device -&gt; ../../../2-1.1:1.0    #设备链接的位置
+drwxr-xr-x root     root              2000-01-01 09:44 event2
+drwxr-xr-x root     root              2000-01-01 09:44 id
+-r--r--r-- root     root         4096 2000-01-01 09:44 modalias
+drwxr-xr-x root     root              2000-01-01 09:44 mouse0
+</code></pre>
+
+<h4>hid出现</h4>
+
+<pre><code> cd ../../../2-1.1:1.0
+ ll
+
+ #出现以下信息
+drwxr-xr-x root     root              2000-01-01 09:48 0003:03FC:0588.0004
+-r--r--r-- root     root         4096 2000-01-01 09:48 bAlternateSetting
+-r--r--r-- root     root         4096 2000-01-01 09:48 bInterfaceClass
+-r--r--r-- root     root         4096 2000-01-01 09:48 bInterfaceNumber
+-r--r--r-- root     root         4096 2000-01-01 09:48 bInterfaceProtocol
+-r--r--r-- root     root         4096 2000-01-01 09:48 bInterfaceSubClass
+-r--r--r-- root     root         4096 2000-01-01 09:48 bNumEndpoints
+lrwxrwxrwx root     root              2000-01-01 09:48 driver -&gt; ../../../../../../../bus/usb/drivers/usbhid  #内核divers目录
+
+cd ../../../../../../../bus/usb/drivers/usbhid
+ll
+
+#出现以下信息
+lrwxrwxrwx root     root              2000-01-01 09:51 2-1.1:1.0 -&gt; ../../../../devices/platform/usb20_host/usb2/2-1/2-1.1/2-1.1:1.0
+lrwxrwxrwx root     root              2000-01-01 09:51 2-1.1:1.1 -&gt; ../../../../devices/platform/usb20_host/usb2/2-1/2-1.1/2-1.1:1.1
+lrwxrwxrwx root     root              2000-01-01 09:51 2-1.1:1.2 -&gt; ../../../../devices/platform/usb20_host/usb2/2-1/2-1.1/2-1.1:1.2
+lrwxrwxrwx root     root              2000-01-01 09:51 2-1.3:1.0 -&gt; ../../../../devices/platform/usb20_host/usb2/2-1/2-1.3/2-1.3:1.0
+--w------- root     root         4096 2000-01-01 09:51 bind
+lrwxrwxrwx root     root              2000-01-01 09:51 module -&gt; ../../../../module/usbhid
+--w------- root     root         4096 2000-01-01 09:51 new_id
+--w------- root     root         4096 2000-01-01 09:51 remove_id
+--w------- root     root         4096 2000-01-01 09:51 uevent
+--w------- root     root         4096 2000-01-01 09:51 unbind
+</code></pre>
+
+<h4>源码中查找</h4>
+
+<p>  进入android源代码，进入kernel目录</p>
+
+<pre><code>  cd drivers
+  find . -name usbhid*
+
+  #出现以下信息
+  ./hid/usbhid
+  ./hid/usbhid/usbhid.o
+  ./hid/usbhid/usbhid.h
+</code></pre>
+
+<p>  我们知道kernel设备是需要注册的，hid目录下有一个hid-ids.h在里面通过vid和pid加入我们自己的设备</p>
+
+<pre><code>  vi ./hid/hid-ids.h
+
+ #ifndef HID_IDS_H_FILE
+ #define HID_IDS_H_FILE
+
+//加在所有设备的上面 =.=
+#define USB_VENROR_ID_KIT  0x03fc  //名字自己定义，id为第一步中的vid
+#define USB_PRO_ID_KIT     0x0588  //名字自己定义，id为第一步中的pid
+</code></pre>
+
+<p>下面我们看一下怎样使用这些id，全局搜索一下系统自带的id如何使用的。</p>
+
+<pre><code> find ./hid/ -name '*' -exec grep 'USB_VENDOR_ID_3M' '{}' \; -print
+
+  # 出现以下信息
+  grep: ./hid/: 是一个目录
+      HID_USB_DEVICE(USB_VENDOR_ID_3M,
+      HID_USB_DEVICE(USB_VENDOR_ID_3M,
+      HID_USB_DEVICE(USB_VENDOR_ID_3M,
+  ./hid/hid-multitouch.c
+  #define USB_VENDOR_ID_3M      0x0596
+  ./hid/hid-ids.h
+  grep: ./hid/usbhid: 是一个目录
+      { HID_USB_DEVICE(USB_VENDOR_ID_3M, USB_DEVICE_ID_3M1968) },
+      { HID_USB_DEVICE(USB_VENDOR_ID_3M, USB_DEVICE_ID_3M2256) },
+  ./hid/hid-core.c
+</code></pre>
+
+<p>按照以上出现的地方，hid-multitouch.c,hid-core.c 中去加自己的设备</p>
+
+<pre><code> vi ./hid/hid-multitouch.c
+
+  static const struct hid_device_id mt_devices[] = {
+ /* 仿照其他的将自己的设备vid pid写上 */
+ { .driver_data = MT_CLS_KIT,
+     HID_USB_DEVICE(USB_VENROR_ID_KIT,
+         USB_PRO_ID_KIT) },
+</code></pre>
+
+<p>修改hid-core</p>
+
+<pre><code>vi ./hid/hid-core.c
+
+static const struct hid_device_id hid_have_special_driver[] = {
+     { HID_USB_DEVICE(USB_VENROR_ID_KIT, USB_PRO_ID_KIT) },
+</code></pre>
+
+<h4>内核配置</h4>
+
+<p>我博客中有讲，不细说</p>
+
+<pre><code>    sudo make ARCH=arm menuconfig
+
+    #需要配置的地方
+   1. Device Drivers --&gt;
+            HID Devices --&gt;//这里面的全选
+               HID Multitouch panels  //在这个选项上按y
+
+
+  2.Device Drivers --&gt;
+            Input device support --&gt;
+            [*]     Provide legacy /dev/psaux device
+             (1024)  Horizontal screen resolution
+             (768)   Vertical screen resolution
+</code></pre>
+
+<p>然后编译内核和android 这里就不说了！</p>
+
+<pre><code>     getevent 查看
+
+  #出现以下信息，如果出现ABS_MT恭喜你 你成功了
+ [    8698.525097] /dev/input/event2: EV_SYN       SYN_REPORT           00000000
+ [    8698.542045] /dev/input/event2: EV_ABS       ABS_MT_POSITION_X    00000095
+ [    8698.542052] /dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    0000048b
+ [    8698.542084] /dev/input/event2: EV_ABS       ABS_X                00000095
+ [    8698.542089] /dev/input/event2: EV_ABS       ABS_Y                0000048b
+ [    8698.542101] /dev/input/event2: EV_SYN       SYN_REPORT           00000000
+ [    8698.559043] /dev/input/event2: EV_ABS       ABS_MT_POSITION_X    0000009e
+ [    8698.559051] /dev/input/event2: EV_ABS       ABS_MT_POSITION_Y    00000484
+</code></pre>
+
+<hr>
+</div>
+ </div>
+</div>
+</div>
+
+<script src="https://s.tbcdn.cn/g/fi/bui/jquery-1.8.1.min.js"></script>
+<script src="https://s.tbcdn.cn/g/fi/bui/seed-min.js?t=201212261326"></script>
+<script src="../assets/js/config.js"></script>
+<script>
+    BUI.use('common/page', function (Page) {
+        new Page().init();
+    });
+</script>
+</body>
+</html>

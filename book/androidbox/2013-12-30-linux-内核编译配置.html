@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta http-equiv="content-language" content="zh-cn" />
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <meta name="author" content="Mr.xia" />
+  <meta name="description" content="硬件" />
+  <meta name="keywords" content="硬件,个人站点,博客,编程" />
+  <title>懿心</title>
+  <!--link href="/rss.xml" rel="alternate" title="Mr.xia" type="application/atom+xml" /-->
+  <link rel="icon" type="image/png" href="/img/favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="favicon.ico" type="image/x-icon" rel="shortcut icon">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/dpl-min.css" rel="stylesheet">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/bui-min.css" rel="stylesheet">
+    <link href="../assets/css/prettify.css" rel="stylesheet">
+    <link href="../assets/css/page.css" rel="stylesheet">
+    <script type="text/javascript" src="../assets/js/prettify.js"></script>
+</head>
+<body>
+
+		<div class="container">
+ 
+   <div class="col-xs-12 col-sm-8 col-md-8">
+	  <div class="panel panel-default">
+	    <div class="panel-body">
+
+
+<hr>
+<h1>android kernel config</h1>
+
+
+
+
+<div class="intro-wraper">
+    <img class="intro-img" src="../assets/img/kernel_config.jpg"/>
+
+    <div class="introduce">
+        <h2>导引</h2>
+
+        <p>关于android kernel 编译，配置</p>
+        <ol>
+            <li>内核配置原理</li>
+            <li>内核图形配置</li>
+         </ol>
+        <ul class="intro-level">
+            <li><span>难度：</span>简单</li>
+            <li><span>版本：</span>1.0</li>
+        </ul>
+    </div>
+</div>
+
+
+<ul>
+<li><p>内核配置</p>
+
+<p> make menuconfig 或者make ARCH=arm menuconfig</p></li>
+<li><p>编译</p>
+
+<p> make kernel.img</p></li>
+<li><p>清除编译的东西</p>
+
+<p> make clean</p></li>
+</ul>
+
+
+<h2>kernel 编译原理</h2>
+
+<p>   在driver目录下,每一个子目录都有一个makefile 和一个kconfig
+* makefile 例如</p>
+
+<pre><code>        input-core-y := input.o input-compat.o input-mt.o ff-core.o
+
+        obj-$(CONFIG_INPUT_FF_MEMLESS)  += ff-memless.o
+        obj-$(CONFIG_INPUT_POLLDEV) += input-polldev.o
+        obj-$(CONFIG_INPUT_SPARSEKMAP)  += sparse-keymap.o
+
+        obj-$(CONFIG_INPUT_MOUSEDEV)    += mousedev.o
+        obj-$(CONFIG_INPUT_JOYDEV)  += joydev.o
+        obj-$(CONFIG_INPUT_EVDEV)   += evdev.o
+        obj-$(CONFIG_INPUT_EVBUG)   += evbug.o
+</code></pre>
+
+<ul>
+<li><p>Kconfig 例如</p>
+
+<pre><code>     menu "Input device support"
+     depends on !S390
+
+     config INPUT
+        tristate "Generic input layer (needed for keyboard, mouse, ...)" if EXPERT
+        default y
+        help
+           Say Y here if you have any input device (mouse, keyboard, tablet,
+           joystick, steering wheel ...) connected to your system and want
+              .....
+</code></pre></li>
+<li><p>.config</p>
+
+<pre><code>    CONFIG_MMC_BLOCK=y
+    CONFIG_MMC_BLOCK_MINORS=8
+    CONFIG_MMC_BLOCK_BOUNCE=y
+    # CONFIG_MMC_BLOCK_DEFERRED_RESUME is not set
+    # CONFIG_SDIO_UART is not set
+</code></pre></li>
+</ul>
+
+
+<h2>linux 内核支持adk</h2>
+
+<ul>
+<li><p>有人在要配置adk时，发现在android 设备中的/proc/找不到config.gz,那是在编译内核的时候，没有勾选Enable access to .config through /proc/config.gz</p>
+
+<p> 进入android kernel目录，make menuconfig 或者make ARCH=arm menuconfig</p>
+
+<pre><code>       General setup  ---&gt;
+             Kernel .config support
+                  [*] Enable access to .config through /proc/config.gz
+</code></pre>
+
+<p> 在该栏目中按y 即可。</p></li>
+<li><p>adk支持（本身是不显示的）</p>
+
+<pre><code> add: ADB Garget /drives/usb/gadget/
+ CONFIG_USB_ANDROID    (android.c)
+ CONFIG_USB_ANDROID_ACM   (f_acm.c u_serial.c)
+ CONFIG_USB_ANDROID_ADB   (f_adb.c)
+ CONFIG_USB_ANDROID_MASS_STORAGE (f_mass_storage.c)
+ CONFIG_USB_ANDROID_MTP   (f_mtp.c)
+ CONFIG_USB_ANDROID_RNDIS     (f_rndis.c u_ether.c)
+ CONFIG_USB_ANDROID_ACCESSORY (f_accessory.c)
+
+ Device Drivers  ---&gt;
+         [*] USB support  ---&gt;
+             &lt;*&gt; USB Gadget Support  ---&gt;
+                 &lt;*&gt; USB Gadget Drivers (Android Gadget)  ---&gt;
+                     [X]       Android gadget
+</code></pre></li>
+</ul>
+
+
+<p>将以上的.c文件<a href="https://gitorious.org/replicant/kernel_samsung_crespo/source/b15e5954ceec385abe84e2928dd08d8917e18627:drivers/usb/gadget">下载</a>后放入，drives/usb/gadget中</p>
+
+<pre><code>          vi ./Kconfig
+</code></pre>
+
+<p>将入以下配置加入Kconfig中</p>
+
+<pre><code>config USB_ANDROID_ACM
+     boolean "Android gadget ACM serial function"
+     depends on USB_ANDROID
+     help
+       Provides ACM serial function for android gadget driver.
+config USB_ANDROID_ADB
+    boolean "Android gadget adb function"
+    depends on USB_ANDROID
+    help
+       Provides adb function for android gadget driver.
+config USB_ANDROID_MASS_STORAGE
+    boolean "Android gadget mass storage function"
+    depends on USB_ANDROID &amp;&amp; SWITCH
+    help
+      Provides USB mass storage function for android gadget driver.
+config USB_ANDROID_MTP
+    boolean "Android MTP function"
+    depends on USB_ANDROID
+    help
+      Provides Media Transfer Protocol (MTP) support for android gadget driver.
+config USB_ANDROID_RNDIS
+    boolean "Android gadget RNDIS ethernet function"
+    depends on USB_ANDROID
+    help
+       Provides RNDIS ethernet function for android gadget driver.
+config USB_ANDROID_RNDIS_WCEIS
+    boolean "Use Windows Internet Sharing Class/SubClass/Protocol"
+    depends on USB_ANDROID_RNDIS
+    help
+      Causes the driver to look like a Windows-compatible Internet
+      Sharing device, so Windows auto-detects it.
+      If you enable this option, the device is no longer CDC ethernet
+      compatible.
+config USB_ANDROID_RNDIS_DWORD_ALIGNED
+    boolean "Use double word aligned"
+    depends on USB_ANDROID_RNDIS
+    help
+       Provides dword aligned for DMA controller.
+config USB_ANDROID_ACCESSORY
+    boolean "Android USB accessory function"
+    depends on USB_ANDROID
+    help
+        Provides Android USB Accessory support for android gadget driver.
+</code></pre>
+
+<p>看到以上你们可能就明白了，这些配置都是依赖于usb_android的当usb_android选中他们的config就=y了！
+然后在Makefile中加入</p>
+
+<pre><code>    obj-$(CONFIG_USB_ANDROID) += android.o
+    obj-$(CONFIG_USB_ANDROID_ACM) += f_acm.o u_serial.o
+    obj-$(CONFIG_USB_ANDROID_ADB) += f_adb.o
+    obj-$(CONFIG_USB_ANDROID_MASS_STORAGE) += f_mass_storage.o
+    obj-$(CONFIG_USB_ANDROID_MTP) += f_mtp.o
+    obj-$(CONFIG_USB_ANDROID_RNDIS) += f_rndis.o u_ether.o
+    obj-$(CONFIG_USB_ANDROID_ACCESSORY) += f_accessory.o
+</code></pre>
+
+<h2>判断设备是否支持adk</h2>
+
+<p>*</p>
+
+<pre><code>adb pull /proc/config.gz
+</code></pre>
+
+<p>  然后打开，应该会有以下字段</p>
+
+<pre><code>ezgb_ebi0_defconfig:CONFIG_USB_ANDROID_ACCESSORY=y
+ezgb_2708_defconfig:CONFIG_USB_ANDROID_ACCESSORY=y
+ezgb_ebi1_defconfig:CONFIG_USB_ANDROID_ACCESSORY=y
+</code></pre>
+
+<ul>
+<li><p>另外需要在system/framework/下 com.android.future.usb.accessory.jar，</p></li>
+<li><p>/etc/permissions/下 android.hardware.usb.accessory.xml</p></li>
+</ul>
+
+
+<h2>参考网页</h2>
+
+<p><a href="http://jeffreysambells.com/2011/05/17/understanding-the-demokit-pde-arduino-sketch">demokit原理</a>
+<a href="http://blog.csdn.net/slugzoe/article/details/6897534">环境搭建</a>
+<a href="http://blog.chinaunix.net/uid-20514606-id-3554659.html">原理</a>
+<a href="https://www.codeaurora.org/cgit">andoird jb源码</a>
+<a href="http://www.microchip.com/stellent/idcplg?IdcService=SS_GET_PAGE&amp;nodeId=2919&amp;param=en546070">支持adk的机子</a>
+<a href="https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/tree/?id=refs/tags/v3.13-rc6">内核源代码</a></p>
+
+<hr>
+</div>
+ </div>
+</div>
+</div>
+
+<script src="https://s.tbcdn.cn/g/fi/bui/jquery-1.8.1.min.js"></script>
+<script src="https://s.tbcdn.cn/g/fi/bui/seed-min.js?t=201212261326"></script>
+<script src="../assets/js/config.js"></script>
+<script>
+    BUI.use('common/page', function (Page) {
+        new Page().init();
+    });
+</script>
+</body>
+</html>

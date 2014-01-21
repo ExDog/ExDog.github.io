@@ -5,14 +5,14 @@
   <title>文档</title>
   <meta name="description" content="It_文档">
   <meta name="author" content="ExDogz@gmail.com">
-  <link href="favicon.ico" type="image/x-icon" rel="shortcut icon">
+  <link href="favicon.png" type="image/x-icon" rel="shortcut icon">
   <link href="https://s.tbcdn.cn/g/fi/bui/css/dpl-min.css" rel="stylesheet"> 
   <link href="https://s.tbcdn.cn/g/fi/bui/css/bui-min.css" rel="stylesheet">
   <link href="assets/css/home.css" rel="stylesheet"> 
 </head>
 <body>
   <div id="header">
-    <h1>懿心工作室</h1>
+    <h1>懿心</h1>
   </div>
   <div id="content">
     <div id="J_Tree" class="nav-tree"></div>
@@ -32,33 +32,18 @@
           text : '介绍'
          },
 	{
-          id : 'linux',
-          text : 'linux 工作技巧',
+          id : 'androidbox',
+          text : '乐知行盒子',
           children:[
-            {id:'env',text : 'linux 环境'},
-          ]
-        }, {
-         id  : 'mac',
-          text : 'mac 下工作技巧',
-          children:[
-            {id:'env',text : 'linux 环境'},
-          ]
-         },
-       {
-          id : 'android',
-          text : 'android 应用开发',
-          children:[
-            {id:'env',text : 'linux 环境'},
-          ]
-       },
-         {
-           id : 'ios',
-           text: 'ios 应用开发',
-            children:[
-            {id:'env',text : 'linux 环境'},
+          {id:'start',text: 'start'},
+          {id:'2013-1-7-linux-编译环境搭建',text : 'linux evn'},
+          {id:'2013-12-30-linux-内核编译配置',text:'android kernel config'},
+          {id: '2013-09-16-android-调试',text:'android cmd' },
+          {id: '2013-12-27-hid-touchscreen',text:'usbtouch'},
+          {id: '2014-1-7-android架构',text:'android framwork'},
+          {id: 'android启动',text:'android start'}
            ]
-          }
-          
+        }
        ];
       new MainPage({
         menus : chapters

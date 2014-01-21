@@ -1,0 +1,2405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta http-equiv="content-language" content="zh-cn" />
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <meta name="author" content="Mr.xia" />
+  <meta name="description" content="硬件" />
+  <meta name="keywords" content="硬件,个人站点,博客,编程" />
+  <title>懿心</title>
+  <!--link href="/rss.xml" rel="alternate" title="Mr.xia" type="application/atom+xml" /-->
+  <link rel="icon" type="image/png" href="/img/favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="favicon.ico" type="image/x-icon" rel="shortcut icon">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/dpl-min.css" rel="stylesheet">
+    <link href="https://s.tbcdn.cn/g/fi/bui/css/bui-min.css" rel="stylesheet">
+    <link href="../assets/css/prettify.css" rel="stylesheet">
+    <link href="../assets/css/page.css" rel="stylesheet">
+    <script type="text/javascript" src="../assets/js/prettify.js"></script>
+</head>
+<body>
+
+		<div class="container">
+ 
+   <div class="col-xs-12 col-sm-8 col-md-8">
+	  <div class="panel panel-default">
+	    <div class="panel-body">
+
+
+<hr>
+<h1>android kernel hid 分析</h1>
+
+
+
+
+<div class="intro-wraper">
+    <img class="intro-img" src="../assets/img/adb_cmd.jpg"/>
+
+    <div class="introduce">
+        <h2>导引</h2>
+
+        <p>kernel hid分析</p>
+        <ol>
+
+         </ol>
+        <ul class="intro-level">
+            <li><span>难度：</span>难</li>
+            <li><span>版本：</span>1.0</li>
+        </ul>
+    </div>
+</div>
+
+
+<h2>前言</h2>
+
+<p>HID是Human Interface Devices的缩写.翻译成中文即为人机交互设备.这里的人机交互设备是一个宏观上面的概念,任何设备,只要符合HID spec,都可以称之为HID设备.常见的HID设备有鼠标键盘,游戏操纵杆等等.在接下来的代码分析中,可以参考HID的spec.这份spec可以在www.usb.org上找到.分析的代码主要集中在linuxkernel/drivers/hid目录下.
+二:HID驱动入口分析
+USB HID设备驱动入口位于linux-2.6.25/drivers/hid/usbhid/hid-core.c中.该module的入口为hid_init().代码如下:</p>
+
+<pre><code>static int __init hid_init(void)
+{
+    int retval;
+    retval = usbhid_quirks_init(quirks_param);
+    if (retval)
+    goto usbhid_quirks_init_fail;
+ retval = hiddev_init();
+if (retval)
+    goto hiddev_init_fail;
+retval = usb_register(&amp;hid_driver);
+if (retval)
+    goto usb_register_fail;
+info(DRIVER_VERSION ":" DRIVER_DESC);
+
+return 0;
+usb_register_fail:
+hiddev_exit();
+hiddev_init_fail:
+usbhid_quirks_exit();
+usbhid_quirks_init_fail:
+return retval;
+}
+</code></pre>
+
+<p>首先来看usbhid_quirks_init()函数.quirks我们在分析UHCI和HUB的时候也接触过,表示需要做某种修正的设备.该函数调用的参数是quirks_param.定义如下:
+static char *quirks_param[MAX_USBHID_BOOT_QUIRKS] = { [ 0 ... (MAX_USBHID_BOOT_QUIRKS - 1) ] = NULL };
+module_param_array_named(quirks, quirks_param, charp, NULL, 0444);
+从此可以看出, quirks_param是MAX_USBHID_BOOT_QUIRKS元素的字符串数组.并且在加载module的时候,可以动态的指定这些值.
+分析到这里.有人可以反应过来了,usbhid_quirks_init()是一种动态进行HID设备修正的方式.具体要修正哪些设备,要修正设备的那些方面,都可以由加载模块是所带参数来决定.
+usbhid_quirks_init()的代码如下:
+int usbhid_quirks_init(char **quirks_param)
+{
+    u16 idVendor, idProduct;
+    u32 quirks;
+    int n = 0, m;</p>
+
+<pre><code>for (; quirks_param[n] &amp;&amp; n &lt; MAX_USBHID_BOOT_QUIRKS; n++) {
+
+    m = sscanf(quirks_param[n], "0x%hx:0x%hx:0x%x",
+            &amp;idVendor, &amp;idProduct, &amp;quirks);
+
+    if (m != 3 ||
+            usbhid_modify_dquirk(idVendor, idProduct, quirks) != 0) {
+        printk(KERN_WARNING
+                "Could not parse HID quirk module param %s\n",
+                quirks_param[n]);
+    }
+}
+
+return 0;
+</code></pre>
+
+<p>}
+由此可以看出, quirks_param数组中的每一项可以分为三个部份,分别是要修正设备的VendorID,ProductID和要修正的功能.比如0x1000 0x0001 0x0004就表示:要忽略掉VendorID为0x1000,ProductID为0x0004的设备.(在代码中,有 #define HID_QUIRK_IGNORE    0x00000004的定义)</p>
+
+<p>跟进usbhid_modify_dquirk()函数,代码如下:
+int usbhid_modify_dquirk(const u16 idVendor, const u16 idProduct,
+        const u32 quirks)
+{
+    struct quirks_list_struct <em>q_new, </em>q;
+    int list_edited = 0;</p>
+
+<pre><code>if (!idVendor) {
+    dbg_hid("Cannot add a quirk with idVendor = 0\n");
+    return -EINVAL;
+}
+
+q_new = kmalloc(sizeof(struct quirks_list_struct), GFP_KERNEL);
+if (!q_new) {
+    dbg_hid("Could not allocate quirks_list_struct\n");
+    return -ENOMEM;
+}
+
+q_new-&gt;hid_bl_item.idVendor = idVendor;
+q_new-&gt;hid_bl_item.idProduct = idProduct;
+q_new-&gt;hid_bl_item.quirks = quirks;
+
+down_write(&amp;dquirks_rwsem);
+
+list_for_each_entry(q, &amp;dquirks_list, node) {
+
+    if (q-&gt;hid_bl_item.idVendor == idVendor &amp;&amp;
+            q-&gt;hid_bl_item.idProduct == idProduct) {
+
+        list_replace(&amp;q-&gt;node, &amp;q_new-&gt;node);
+        kfree(q);
+        list_edited = 1;
+        break;
+
+    }
+
+}
+
+if (!list_edited)
+    list_add_tail(&amp;q_new-&gt;node, &amp;dquirks_list);
+
+up_write(&amp;dquirks_rwsem);
+
+return 0;
+</code></pre>
+
+<p>}
+这个函数比较简单,就把quirks_param数组项中的三个部份存入一个封装结构.然后将其结构挂载到dquirks_list表.如果dquirks_list有重复的VendorId和ProductID就更新其quirks信息.</p>
+
+<p>经过usbhid_quirks_init()之后,所有要修正的设备的相关操作都会存放在dquirks_list中.
+返回到hid_init(),继续往下面分析.
+hiddev_init()是一个无关的操作,不会影响到后面的操作.忽略
+后面就是我们今天要分析的重点了,如下:
+retval = usb_register(&amp;hid_driver);
+通过前面对HUB的驱动分析,相信对usb_redister()应该很熟悉了.hid_driver定义如下:
+static struct usb_driver hid_driver = {
+    .name =     "usbhid",
+    .probe =    hid_probe,
+    .disconnect =   hid_disconnect,
+    .suspend =  hid_suspend,
+    .resume =   hid_resume,
+    .reset_resume = hid_post_reset,
+    .pre_reset =    hid_pre_reset,
+    .post_reset =   hid_post_reset,
+    .id_table = hid_usb_ids,
+    .supports_autosuspend = 1,
+};
+其中,id_table的结构为hid_usb_ids.定义如下:
+static struct usb_device_id hid_usb_ids [] = {
+    { .match_flags = USB_DEVICE_ID_MATCH_INT_CLASS,
+        .bInterfaceClass = USB_INTERFACE_CLASS_HID },
+    { }                     /<em> Terminating entry </em>/
+};
+也就是说,该驱动会匹配interface的ClassID,所有ClassID为USB_INTERFACE_CLASS_HID的设备都会被这个驱动所匹配.所以,所有USB HID设备都会由这个module来驱动.</p>
+
+<p>三:HID驱动的probe过程
+从上面的分析可看到,probe接口为hid_probe().定义如下:
+static int hid_probe(struct usb_interface <em>intf, const struct usb_device_id </em>id)
+{
+    struct hid_device <em>hid;
+    char path[64];
+    int i;
+    char </em>c;</p>
+
+<pre><code>dbg_hid("HID probe called for ifnum %d\n",
+        intf-&gt;altsetting-&gt;desc.bInterfaceNumber);
+//config the hid device
+if (!(hid = usb_hid_configure(intf)))
+    return -ENODEV;
+
+usbhid_init_reports(hid);
+hid_dump_device(hid);
+if (hid-&gt;quirks &amp; HID_QUIRK_RESET_LEDS)
+    usbhid_set_leds(hid);
+
+if (!hidinput_connect(hid))
+    hid-&gt;claimed |= HID_CLAIMED_INPUT;
+if (!hiddev_connect(hid))
+    hid-&gt;claimed |= HID_CLAIMED_HIDDEV;
+if (!hidraw_connect(hid))
+    hid-&gt;claimed |= HID_CLAIMED_HIDRAW;
+
+usb_set_intfdata(intf, hid);
+
+if (!hid-&gt;claimed) {
+    printk ("HID device claimed by neither input, hiddev nor hidraw\n");
+    hid_disconnect(intf);
+    return -ENODEV;
+}
+
+if ((hid-&gt;claimed &amp; HID_CLAIMED_INPUT))
+    hid_ff_init(hid);
+
+if (hid-&gt;quirks &amp; HID_QUIRK_SONY_PS3_CONTROLLER)
+    hid_fixup_sony_ps3_controller(interface_to_usbdev(intf),
+        intf-&gt;cur_altsetting-&gt;desc.bInterfaceNumber);
+
+printk(KERN_INFO);
+
+if (hid-&gt;claimed &amp; HID_CLAIMED_INPUT)
+    printk("input");
+if ((hid-&gt;claimed &amp; HID_CLAIMED_INPUT) &amp;&amp; ((hid-&gt;claimed &amp; HID_CLAIMED_HIDDEV) ||
+            hid-&gt;claimed &amp; HID_CLAIMED_HIDRAW))
+    printk(",");
+if (hid-&gt;claimed &amp; HID_CLAIMED_HIDDEV)
+    printk("hiddev%d", hid-&gt;minor);
+if ((hid-&gt;claimed &amp; HID_CLAIMED_INPUT) &amp;&amp; (hid-&gt;claimed &amp; HID_CLAIMED_HIDDEV) &amp;&amp;
+        (hid-&gt;claimed &amp; HID_CLAIMED_HIDRAW))
+    printk(",");
+if (hid-&gt;claimed &amp; HID_CLAIMED_HIDRAW)
+    printk("hidraw%d", ((struct hidraw*)hid-&gt;hidraw)-&gt;minor);
+
+c = "Device";
+for (i = 0; i &lt; hid-&gt;maxcollection; i++) {
+    if (hid-&gt;collection[i].type == HID_COLLECTION_APPLICATION &amp;&amp;
+        (hid-&gt;collection[i].usage &amp; HID_USAGE_PAGE) == HID_UP_GENDESK &amp;&amp;
+        (hid-&gt;collection[i].usage &amp; 0xffff) &lt; ARRAY_SIZE(hid_types)) {
+        c = hid_types[hid-&gt;collection[i].usage &amp; 0xffff];
+        break;
+    }
+}
+
+usb_make_path(interface_to_usbdev(intf), path, 63);
+
+printk(": USB HID v%x.%02x %s [%s] on %s\n",
+    hid-&gt;version &gt;&gt; 8, hid-&gt;version &amp; 0xff, c, hid-&gt;name, path);
+
+return 0;
+</code></pre>
+
+<p>}
+这个函数看起来是不是让人心慌慌?其实这个函数的最后一部份就是打印出一个Debug信息,我们根本就不需要去看. hiddev_connect()和hidraw_connect()是一个选择编译的操作,也不可以不要去理会.然后,剩下的就没多少了.</p>
+
+<p>3.1:usb_hid_configure()函数分析
+先来看usb_hid_configure().顾名思义,该接口用来配置hid设备.怎么配置呢?还是深入到代码来分析,该函数有一点长,分段分析如下:
+static struct hid_device <em>usb_hid_configure(struct usb_interface </em>intf)
+{
+    struct usb_host_interface <em>interface = intf->cur_altsetting;
+    struct usb_device </em>dev = interface_to_usbdev (intf);
+    struct hid_descriptor <em>hdesc;
+    struct hid_device </em>hid;
+    u32 quirks = 0;
+    unsigned rsize = 0;
+    char <em>rdesc;
+    int n, len, insize = 0;
+    struct usbhid_device </em>usbhid;</p>
+
+<pre><code>quirks = usbhid_lookup_quirk(le16_to_cpu(dev-&gt;descriptor.idVendor),
+        le16_to_cpu(dev-&gt;descriptor.idProduct));
+
+/* Many keyboards and mice don't like to be polled for reports,
+ * so we will always set the HID_QUIRK_NOGET flag for them. */
+ //如果是boot设备,跳出.不由此驱动处理
+if (interface-&gt;desc.bInterfaceSubClass == USB_INTERFACE_SUBCLASS_BOOT) {
+    if (interface-&gt;desc.bInterfaceProtocol == USB_INTERFACE_PROTOCOL_KEYBOARD ||
+        interface-&gt;desc.bInterfaceProtocol == USB_INTERFACE_PROTOCOL_MOUSE)
+            quirks |= HID_QUIRK_NOGET;
+}
+
+//如果是要忽略的
+if (quirks &amp; HID_QUIRK_IGNORE)
+    return NULL;
+
+if ((quirks &amp; HID_QUIRK_IGNORE_MOUSE) &amp;&amp;
+    (interface-&gt;desc.bInterfaceProtocol == USB_INTERFACE_PROTOCOL_MOUSE))
+        return NULL;
+</code></pre>
+
+<p>首先找到该接口需要修正的操作,也就是上面代码中的quirks值,如果没有修正操作,则quirks为0.另外,根据usb hid spec中的定义,subclass如果为1,则说明该设备是一个boot阶段使用的hid设备,然后Protocol Code为1和2时分别代表Keyboard和Mouse. 如果是boot阶段的Keyboard和Mouse是不会由这个驱动进行处理的.另外,quirks为HID_QUIRK_IGNORE表示忽略这个设备,为HID_QUIRK_IGNORE_MOUSE,表示,如果该设备是一个鼠标设备,则忽略.</p>
+
+<pre><code>//get hid descriptors
+if (usb_get_extra_descriptor(interface, HID_DT_HID, &amp;hdesc) &amp;&amp;
+    (!interface-&gt;desc.bNumEndpoints ||
+     usb_get_extra_descriptor(&amp;interface-&gt;endpoint[0], HID_DT_HID, &amp;hdesc))) {
+    dbg_hid("class descriptor not present\n");
+    return NULL;
+}
+
+//bNumDescriptors:支持的附属描述符数目
+for (n = 0; n &lt; hdesc-&gt;bNumDescriptors; n++)
+    if (hdesc-&gt;desc[n].bDescriptorType == HID_DT_REPORT)
+        rsize = le16_to_cpu(hdesc-&gt;desc[n].wDescriptorLength);
+//如果Report_Descriptors长度不合法
+if (!rsize || rsize &gt; HID_MAX_DESCRIPTOR_SIZE) {
+    dbg_hid("weird size of report descriptor (%u)\n", rsize);
+    return NULL;
+}
+
+if (!(rdesc = kmalloc(rsize, GFP_KERNEL))) {
+    dbg_hid("couldn't allocate rdesc memory\n");
+    return NULL;
+}
+
+//Set idle_time = 0
+hid_set_idle(dev, interface-&gt;desc.bInterfaceNumber, 0, 0);
+//Get Report_Descriptors
+if ((n = hid_get_class_descriptor(dev, interface-&gt;desc.bInterfaceNumber, HID_DT_REPORT, rdesc, rsize)) &lt; 0) {
+    dbg_hid("reading report descriptor failed\n");
+    kfree(rdesc);
+    return NULL;
+}
+
+//是否属于fixup?
+usbhid_fixup_report_descriptor(le16_to_cpu(dev-&gt;descriptor.idVendor),
+        le16_to_cpu(dev-&gt;descriptor.idProduct), rdesc,
+        rsize, rdesc_quirks_param);
+
+dbg_hid("report descriptor (size %u, read %d) = ", rsize, n);
+for (n = 0; n &lt; rsize; n++)
+    dbg_hid_line(" %02x", (unsigned char) rdesc[n]);
+dbg_hid_line("\n");
+</code></pre>
+
+<p>对于HID设备来说,在interface description之后会附加一个hid description, hid description中的最后部份包含有Report description或者Physical Descriptors的长度.
+在上面的代码中,首先取得附加在interface description之后的hid description,然后,再从hid description中取得report description的长度.最后,取得report description的详细信息.
+在这里,还会将idle时间设备为0,表示无限时,即,从上一次报表传输后,只有在报表发生改变时,才会传送此报表内容,否则,传送NAK.
+这段代码的最后一部份是相关的fixup操作,不做详细分析.</p>
+
+<pre><code>//pasrse the report_descriptor
+if (!(hid = hid_parse_report(rdesc, n))) {
+    dbg_hid("parsing report descriptor failed\n");
+    kfree(rdesc);
+    return NULL;
+}
+
+kfree(rdesc);
+hid-&gt;quirks = quirks;
+
+if (!(usbhid = kzalloc(sizeof(struct usbhid_device), GFP_KERNEL)))
+    goto fail_no_usbhid;
+
+hid-&gt;driver_data = usbhid;
+usbhid-&gt;hid = hid;
+</code></pre>
+
+<p>解析获得的report description,解析之后的信息,存放在hid_device->collection和hid_device->report_enum[ ]中,这个解析过程之后会做详细分析.然后,初始化一个usbhid_device结构,使usbhid_device->hid指向刚解析report description获得的hid_device.同样,hid_device->driver_data关联到usbhid_device.</p>
+
+<pre><code>usbhid-&gt;bufsize = HID_MIN_BUFFER_SIZE;
+//计算各传输方向的最大buffer
+hid_find_max_report(hid, HID_INPUT_REPORT, &amp;usbhid-&gt;bufsize);
+hid_find_max_report(hid, HID_OUTPUT_REPORT, &amp;usbhid-&gt;bufsize);
+hid_find_max_report(hid, HID_FEATURE_REPORT, &amp;usbhid-&gt;bufsize);
+
+if (usbhid-&gt;bufsize &gt; HID_MAX_BUFFER_SIZE)
+    usbhid-&gt;bufsize = HID_MAX_BUFFER_SIZE;
+//in方向的传输最大值
+hid_find_max_report(hid, HID_INPUT_REPORT, &amp;insize);
+
+if (insize &gt; HID_MAX_BUFFER_SIZE)
+    insize = HID_MAX_BUFFER_SIZE;
+
+if (hid_alloc_buffers(dev, hid)) {
+    hid_free_buffers(dev, hid);
+    goto fail;
+}
+</code></pre>
+
+<p>计算传输数据的最大缓存区,并以这个大小为了hid设备的urb传输分配空间.另外,这里有一个最小值限制即代码中所看到的HID_MIN_BUFFER_SIZE,为64, 即一个高速设备的一个端点一次传输的数据量.在这里定义最小值为64是为了照顾低速/全速/高速三种类型的端点传输数据量.
+然后,调用hid_alloc_buffers()为hid的urb传输初始化传输缓冲区.
+另外,需要注意的是,insize为INPUT方向的最大数据传输量.</p>
+
+<pre><code>// 初始化usbhid-&gt;urbin和usbhid-&gt;usbout
+for (n = 0; n &lt; interface-&gt;desc.bNumEndpoints; n++) {
+
+    struct usb_endpoint_descriptor *endpoint;
+    int pipe;
+    int interval;
+
+    endpoint = &amp;interface-&gt;endpoint[n].desc;
+    //不是中断传输 退出
+    if ((endpoint-&gt;bmAttributes &amp; 3) != 3)      /* Not an interrupt endpoint */
+        continue;
+
+    interval = endpoint-&gt;bInterval;
+
+    /* Change the polling interval of mice. */
+    //修正鼠标的双击时间
+    if (hid-&gt;collection-&gt;usage == HID_GD_MOUSE &amp;&amp; hid_mousepoll_interval &gt; 0)
+        interval = hid_mousepoll_interval;
+
+    if (usb_endpoint_dir_in(endpoint)) {
+        if (usbhid-&gt;urbin)
+            continue;
+        if (!(usbhid-&gt;urbin = usb_alloc_urb(0, GFP_KERNEL)))
+            goto fail;
+        pipe = usb_rcvintpipe(dev, endpoint-&gt;bEndpointAddress);
+        usb_fill_int_urb(usbhid-&gt;urbin, dev, pipe, usbhid-&gt;inbuf, insize,
+                 hid_irq_in, hid, interval);
+        usbhid-&gt;urbin-&gt;transfer_dma = usbhid-&gt;inbuf_dma;
+        usbhid-&gt;urbin-&gt;transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+    } else {
+        if (usbhid-&gt;urbout)
+            continue;
+        if (!(usbhid-&gt;urbout = usb_alloc_urb(0, GFP_KERNEL)))
+            goto fail;
+        pipe = usb_sndintpipe(dev, endpoint-&gt;bEndpointAddress);
+        usb_fill_int_urb(usbhid-&gt;urbout, dev, pipe, usbhid-&gt;outbuf, 0,
+                 hid_irq_out, hid, interval);
+        usbhid-&gt;urbout-&gt;transfer_dma = usbhid-&gt;outbuf_dma;
+        usbhid-&gt;urbout-&gt;transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+    }
+}
+
+if (!usbhid-&gt;urbin) {
+    err_hid("couldn't find an input interrupt endpoint");
+    goto fail;
+}
+</code></pre>
+
+<p>遍历接口中的所有endpoint,并初始化in中断传输方向和out中断方向的urb.如果一个hid设备没有in方向的中断传输,非法.
+另外,在这里要值得注意的是, 在为OUT方向urb初始化的时候,它的传输缓存区大小被设为了0.IN方向的中断传输缓存区大小被设为了insize,传输缓存区大小在submit的时候会修正的.</p>
+
+<pre><code>init_waitqueue_head(&amp;hid-&gt;wait);
+
+INIT_WORK(&amp;usbhid-&gt;reset_work, hid_reset);
+setup_timer(&amp;usbhid-&gt;io_retry, hid_retry_timeout, (unsigned long) hid);
+
+spin_lock_init(&amp;usbhid-&gt;inlock);
+spin_lock_init(&amp;usbhid-&gt;outlock);
+spin_lock_init(&amp;usbhid-&gt;ctrllock);
+
+hid-&gt;version = le16_to_cpu(hdesc-&gt;bcdHID);
+hid-&gt;country = hdesc-&gt;bCountryCode;
+hid-&gt;dev = &amp;intf-&gt;dev;
+usbhid-&gt;intf = intf;
+usbhid-&gt;ifnum = interface-&gt;desc.bInterfaceNumber;
+
+hid-&gt;name[0] = 0;
+
+if (dev-&gt;manufacturer)
+    strlcpy(hid-&gt;name, dev-&gt;manufacturer, sizeof(hid-&gt;name));
+
+if (dev-&gt;product) {
+    if (dev-&gt;manufacturer)
+        strlcat(hid-&gt;name, " ", sizeof(hid-&gt;name));
+    strlcat(hid-&gt;name, dev-&gt;product, sizeof(hid-&gt;name));
+}
+
+if (!strlen(hid-&gt;name))
+    snprintf(hid-&gt;name, sizeof(hid-&gt;name), "HID %04x:%04x",
+         le16_to_cpu(dev-&gt;descriptor.idVendor),
+         le16_to_cpu(dev-&gt;descriptor.idProduct));
+
+hid-&gt;bus = BUS_USB;
+hid-&gt;vendor = le16_to_cpu(dev-&gt;descriptor.idVendor);
+hid-&gt;product = le16_to_cpu(dev-&gt;descriptor.idProduct);
+
+usb_make_path(dev, hid-&gt;phys, sizeof(hid-&gt;phys));
+strlcat(hid-&gt;phys, "/input", sizeof(hid-&gt;phys));
+len = strlen(hid-&gt;phys);
+if (len &lt; sizeof(hid-&gt;phys) - 1)
+    snprintf(hid-&gt;phys + len, sizeof(hid-&gt;phys) - len,
+         "%d", intf-&gt;altsetting[0].desc.bInterfaceNumber);
+
+if (usb_string(dev, dev-&gt;descriptor.iSerialNumber, hid-&gt;uniq, 64) &lt;= 0)
+    hid-&gt;uniq[0] = 0;
+</code></pre>
+
+<p>初始化hid的相关信息.</p>
+
+<pre><code>//初始化hid 的ctrl传输
+usbhid-&gt;urbctrl = usb_alloc_urb(0, GFP_KERNEL);
+if (!usbhid-&gt;urbctrl)
+    goto fail;
+
+usb_fill_control_urb(usbhid-&gt;urbctrl, dev, 0, (void *) usbhid-&gt;cr,
+             usbhid-&gt;ctrlbuf, 1, hid_ctrl, hid);
+usbhid-&gt;urbctrl-&gt;setup_dma = usbhid-&gt;cr_dma;
+usbhid-&gt;urbctrl-&gt;transfer_dma = usbhid-&gt;ctrlbuf_dma;
+usbhid-&gt;urbctrl-&gt;transfer_flags |= (URB_NO_TRANSFER_DMA_MAP | URB_NO_SETUP_DMA_MAP);
+hid-&gt;hidinput_input_event = usb_hidinput_input_event;
+hid-&gt;hid_open = usbhid_open;
+hid-&gt;hid_close = usbhid_close;
+</code></pre>
+
+<h1>ifdef CONFIG_USB_HIDDEV</h1>
+
+<pre><code>hid-&gt;hiddev_hid_event = hiddev_hid_event;
+hid-&gt;hiddev_report_event = hiddev_report_event;
+</code></pre>
+
+<h1>endif</h1>
+
+<pre><code>hid-&gt;hid_output_raw_report = usbhid_output_raw_report;
+return hid;
+</code></pre>
+
+<p>初始化usbhid的控制传输urb,之后又初始化了usbhid的几个操作函数.这个操作有什么用途,等用到的时候再来进行分析.
+fail:
+    usb_free_urb(usbhid->urbin);
+    usb_free_urb(usbhid->urbout);
+    usb_free_urb(usbhid->urbctrl);
+    hid_free_buffers(dev, hid);
+    kfree(usbhid);
+fail_no_usbhid:
+    hid_free_device(hid);</p>
+
+<pre><code>return NULL;
+</code></pre>
+
+<p>}
+经过上面的分析之后,我们对这个函数的大概操作有了一定的了解.现在分析里面调用的一些重要的子调函数.等这些子函数全部分析完了之后,不妨回过头看下这个函数.</p>
+
+<p>3.1.1:hid_parse_report()分析
+第一个要分析的函数是hid_parse_report().该函数用来解析report description.
+解析report description是一个繁杂的过程,对这个描述符不太清楚的,仔细看一下spec.在这里我们只会做代码上的分析.
+代码如下:
+struct hid_device <em>hid_parse_report(__u8 </em>start, unsigned size)
+{
+    struct hid_device <em>device;
+    struct hid_parser </em>parser;
+    struct hid_item item;
+    __u8 <em>end;
+    unsigned i;
+    static int (</em>dispatch_type[])(struct hid_parser <em>parser,
+                      struct hid_item </em>item) = {
+        hid_parser_main,
+        hid_parser_global,
+        hid_parser_local,
+        hid_parser_reserved
+    };</p>
+
+<pre><code>if (!(device = kzalloc(sizeof(struct hid_device), GFP_KERNEL)))
+    return NULL;
+
+//默认HID_DEFAULT_NUM_COLLECTIONS 项
+if (!(device-&gt;collection = kzalloc(sizeof(struct hid_collection) *
+               HID_DEFAULT_NUM_COLLECTIONS, GFP_KERNEL))) {
+    kfree(device);
+    return NULL;
+}
+//hid_device-&gt;collection_size: collection的项数
+device-&gt;collection_size = HID_DEFAULT_NUM_COLLECTIONS;
+
+for (i = 0; i &lt; HID_REPORT_TYPES; i++)
+    INIT_LIST_HEAD(&amp;device-&gt;report_enum[i].report_list);
+
+if (!(device-&gt;rdesc = kmalloc(size, GFP_KERNEL))) {
+    kfree(device-&gt;collection);
+    kfree(device);
+    return NULL;
+}
+//hid_device-&gt;rdesc存放report_descriptor,hid_device-&gt;size存放这个描述符的大小
+memcpy(device-&gt;rdesc, start, size);
+device-&gt;rsize = size;
+
+if (!(parser = vmalloc(sizeof(struct hid_parser)))) {
+    kfree(device-&gt;rdesc);
+    kfree(device-&gt;collection);
+    kfree(device);
+    return NULL;
+}
+memset(parser, 0, sizeof(struct hid_parser));
+parser-&gt;device = device;
+
+end = start + size;
+while ((start = fetch_item(start, end, &amp;item)) != NULL) {
+
+    //long item在这里暂不做parse
+    if (item.format != HID_ITEM_FORMAT_SHORT) {
+        dbg_hid("unexpected long global item\n");
+        hid_free_device(device);
+        vfree(parser);
+        return NULL;
+    }
+
+    //parse the short item
+    if (dispatch_type[item.type](parser, &amp;item)) {
+        dbg_hid("item %u %u %u %u parsing failed\n",
+            item.format, (unsigned)item.size, (unsigned)item.type, (unsigned)item.tag);
+        hid_free_device(device);
+        vfree(parser);
+        return NULL;
+    }
+
+    //如果全部解析完了
+    if (start == end) {
+        if (parser-&gt;collection_stack_ptr) {
+            dbg_hid("unbalanced collection at end of report description\n");
+            hid_free_device(device);
+            vfree(parser);
+            return NULL;
+        }
+        if (parser-&gt;local.delimiter_depth) {
+            dbg_hid("unbalanced delimiter at end of report description\n");
+            hid_free_device(device);
+            vfree(parser);
+            return NULL;
+        }
+        vfree(parser);
+        return device;
+    }
+}
+
+dbg_hid("item fetching failed at offset %d\n", (int)(end - start));
+hid_free_device(device);
+vfree(parser);
+return NULL;
+</code></pre>
+
+<p>}
+进入到这个函数,我们首先看到的是Main,Globa,Local标签的解析函数.然后,分配并初始化了hid_device结构和hid<em> parser.在代码中我们看到,hid</em> parser-> device指向了hid_device.后hid_device没有任何域指向hid_parser. 实际上hid_parser只是一个辅助结构.report description解析之后的信息全部都存放在hid_device结构中.
+另外,hid_device-> rdesc保存了一份report description副本.
+然后,就开始对report description的解析.函数fetch_item()用来取出report description的一项数据.代码如下:
+static u8 <em>fetch_item(__u8 </em>start, __u8 <em>end, struct hid_item </em>item)
+{
+    u8 b;</p>
+
+<pre><code>//合法性检测
+if ((end - start) &lt;= 0)
+    return NULL;
+
+//取前面一个字节.对于短项.它的首个字节定义了bsize,bType,bTag.而对于长项,它的值为0xFE
+b = *start++;
+
+item-&gt;type = (b &gt;&gt; 2) &amp; 3;
+item-&gt;tag  = (b &gt;&gt; 4) &amp; 15;
+
+//如果为长项.它的Type和Tag在其后的二个字节中.item-&gt;data.longdata指向数据的起始位置
+if (item-&gt;tag == HID_ITEM_TAG_LONG) {
+
+    item-&gt;format = HID_ITEM_FORMAT_LONG;
+
+    if ((end - start) &lt; 2)
+        return NULL;
+
+    item-&gt;size = *start++;
+    item-&gt;tag  = *start++;
+
+    if ((end - start) &lt; item-&gt;size)
+        return NULL;
+
+    item-&gt;data.longdata = start;
+    start += item-&gt;size;
+    return start;
+}
+//对于短项的情况.取得size值.并根据size值取得它的data域
+item-&gt;format = HID_ITEM_FORMAT_SHORT;
+item-&gt;size = b &amp; 3;
+
+switch (item-&gt;size) {
+
+    case 0:
+        return start;
+
+    case 1:
+        if ((end - start) &lt; 1)
+            return NULL;
+        item-&gt;data.u8 = *start++;
+        return start;
+
+    case 2:
+        if ((end - start) &lt; 2)
+            return NULL;
+        item-&gt;data.u16 = le16_to_cpu(get_unaligned((__le16*)start));
+        start = (__u8 *)((__le16 *)start + 1);
+        return start;
+
+    case 3:
+        item-&gt;size++;
+        if ((end - start) &lt; 4)
+            return NULL;
+        item-&gt;data.u32 = le32_to_cpu(get_unaligned((__le32*)start));
+        start = (__u8 *)((__le32 *)start + 1);
+        return start;
+}
+
+return NULL;
+</code></pre>
+
+<p>}
+对照代码中的注释,应该很容易看懂这个函数,不再详细分析.
+返回到hid_parse_report()中,取得相应项之后,如果是长项,这里不会做处理.对于短项.为不同的type调用不同的解析函数.
+3.1.1.1:Global项解析
+Global的解析入口是hid_parser_global().代码如下:
+static int hid_parser_global(struct hid_parser <em>parser, struct hid_item </em>item)
+{
+    switch (item->tag) {
+        //PUSH项
+        case HID_GLOBAL_ITEM_TAG_PUSH:</p>
+
+<pre><code>        if (parser-&gt;global_stack_ptr == HID_GLOBAL_STACK_SIZE) {
+            dbg_hid("global enviroment stack overflow\n");
+            return -1;
+        }
+
+        memcpy(parser-&gt;global_stack + parser-&gt;global_stack_ptr++,
+            &amp;parser-&gt;global, sizeof(struct hid_global));
+        return 0;
+    //POP项
+    case HID_GLOBAL_ITEM_TAG_POP:
+
+        if (!parser-&gt;global_stack_ptr) {
+            dbg_hid("global enviroment stack underflow\n");
+            return -1;
+        }
+
+        memcpy(&amp;parser-&gt;global, parser-&gt;global_stack + --parser-&gt;global_stack_ptr,
+            sizeof(struct hid_global));
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_USAGE_PAGE:
+        parser-&gt;global.usage_page = item_udata(item);
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_LOGICAL_MINIMUM:
+        parser-&gt;global.logical_minimum = item_sdata(item);
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_LOGICAL_MAXIMUM:
+        if (parser-&gt;global.logical_minimum &lt; 0)
+            parser-&gt;global.logical_maximum = item_sdata(item);
+        else
+            parser-&gt;global.logical_maximum = item_udata(item);
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_PHYSICAL_MINIMUM:
+        parser-&gt;global.physical_minimum = item_sdata(item);
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_PHYSICAL_MAXIMUM:
+        if (parser-&gt;global.physical_minimum &lt; 0)
+            parser-&gt;global.physical_maximum = item_sdata(item);
+        else
+            parser-&gt;global.physical_maximum = item_udata(item);
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_UNIT_EXPONENT:
+        parser-&gt;global.unit_exponent = item_sdata(item);
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_UNIT:
+        parser-&gt;global.unit = item_udata(item);
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_REPORT_SIZE:
+        if ((parser-&gt;global.report_size = item_udata(item)) &gt; 32) {
+            dbg_hid("invalid report_size %d\n", parser-&gt;global.report_size);
+            return -1;
+        }
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_REPORT_COUNT:
+        if ((parser-&gt;global.report_count = item_udata(item)) &gt; HID_MAX_USAGES) {
+            dbg_hid("invalid report_count %d\n", parser-&gt;global.report_count);
+            return -1;
+        }
+        return 0;
+
+    case HID_GLOBAL_ITEM_TAG_REPORT_ID:
+        if ((parser-&gt;global.report_id = item_udata(item)) == 0) {
+            dbg_hid("report_id 0 is invalid\n");
+            return -1;
+        }
+        return 0;
+
+    default:
+        dbg_hid("unknown global tag 0x%x\n", item-&gt;tag);
+        return -1;
+}
+</code></pre>
+
+<p>}
+这个函数虽然长,但是逻辑很简单,对于global信息,存放在hid_parse->global中.
+如果遇到了PUSH项,将当前的global项入栈,栈即为hid_parse-> global_stack[ ].当前的栈顶位置由hid_parse-> global_stack_ptr指定.
+如果遇到了POP项,就将栈中的global信息出栈.</p>
+
+<p>3.1.1.2:Local项解析
+Local项解析的相应接口为hid_parser_local().代码如下:
+static int hid_parser_local(struct hid_parser <em>parser, struct hid_item </em>item)
+{
+    __u32 data;
+    unsigned n;</p>
+
+<pre><code>if (item-&gt;size == 0) {
+    dbg_hid("item data expected for local item\n");
+    return -1;
+}
+
+data = item_udata(item);
+
+switch (item-&gt;tag) {
+
+    //DELIMITER项,定义一个Local项的开始
+    case HID_LOCAL_ITEM_TAG_DELIMITER:
+        //data&gt;1:一个local项开始,0:一个local项结束
+        //parse-&gt;local.delimiter_branch:表示local项计数.
+        //进入一个local项时,local.delimiter_depth为1,退出一个local项时local.delimiter_depth为0
+        // TODO: Local项不能嵌套
+        if (data) {
+            /*
+             * We treat items before the first delimiter
+             * as global to all usage sets (branch 0).
+             * In the moment we process only these global
+             * items and the first delimiter set.
+             */
+            if (parser-&gt;local.delimiter_depth != 0) {
+                dbg_hid("nested delimiters\n");
+                return -1;
+            }
+            parser-&gt;local.delimiter_depth++;
+            parser-&gt;local.delimiter_branch++;
+        } else {
+            if (parser-&gt;local.delimiter_depth &lt; 1) {
+                dbg_hid("bogus close delimiter\n");
+                return -1;
+            }
+            parser-&gt;local.delimiter_depth--;
+        }
+        return 1;
+    //以下各项不能出现在有DELIMITER标签的地方
+    case HID_LOCAL_ITEM_TAG_USAGE:
+
+        if (parser-&gt;local.delimiter_branch &gt; 1) {
+            dbg_hid("alternative usage ignored\n");
+            return 0;
+        }
+</code></pre>
+
+<p>//local的usage项有扩展用法,它的高16可以定义usage_page.如果高16为空,它的//usage_page则定义在global中的usage_page
+            if (item->size &lt;= 2)
+                data = (parser->global.usage_page &lt;&lt; 16) + data;
+            //然后添加到parse->local的usage列表
+            return hid_add_usage(parser, data);</p>
+
+<p>//对于有usage_min和usage_max的情况,将usage_min和usage_max之间的usage添加到//parse=>local的usage列表
+        case HID_LOCAL_ITEM_TAG_USAGE_MINIMUM:</p>
+
+<pre><code>        if (parser-&gt;local.delimiter_branch &gt; 1) {
+            dbg_hid("alternative usage ignored\n");
+            return 0;
+        }
+
+        if (item-&gt;size &lt;= 2)
+            data = (parser-&gt;global.usage_page &lt;&lt; 16) + data;
+
+        parser-&gt;local.usage_minimum = data;
+        return 0;
+
+    case HID_LOCAL_ITEM_TAG_USAGE_MAXIMUM:
+
+        if (parser-&gt;local.delimiter_branch &gt; 1) {
+            dbg_hid("alternative usage ignored\n");
+            return 0;
+        }
+
+        if (item-&gt;size &lt;= 2)
+            data = (parser-&gt;global.usage_page &lt;&lt; 16) + data;
+
+        for (n = parser-&gt;local.usage_minimum; n &lt;= data; n++)
+            if (hid_add_usage(parser, n)) {
+                dbg_hid("hid_add_usage failed\n");
+                return -1;
+            }
+        return 0;
+
+    default:
+
+        dbg_hid("unknown local item tag 0x%x\n", item-&gt;tag);
+        return 0;
+}
+return 0;
+</code></pre>
+
+<p>}
+详细分析一下hid_add_usage().代码如下:
+static int hid_add_usage(struct hid_parser *parser, unsigned usage)
+{
+    if (parser->local.usage_index >= HID_MAX_USAGES) {
+        dbg_hid("usage index exceeded\n");
+        return -1;
+    }
+    parser->local.usage[parser->local.usage_index] = usage;
+    parser->local.collection_index[parser->local.usage_index] =
+        parser->collection_stack_ptr ?
+        parser->collection_stack[parser->collection_stack_ptr - 1] : 0;
+    parser->local.usage_index++;
+    return 0;
+}
+如果usage项超过了HID_MAX_USAGES,为非法.最大为8192项.
+Parse->local.usage_index表示local的项数,当然也表示了parse->local.usage[ ]数组中的下一个可用项.
+parser->local.collection_index表示该usage所在的collection项序号.具体的collection信息存放在hid_deivce->collection[ ]中.
+关于collection我们在分析Main项解析的时候会详细分析.</p>
+
+<p>3.1.1.3:Main项解析
+Main项解析的入口为hid_parser_main().代码如下:
+static int hid_parser_main(struct hid_parser <em>parser, struct hid_item </em>item)
+{
+    __u32 data;
+    int ret;</p>
+
+<pre><code>//data域
+data = item_udata(item);
+
+switch (item-&gt;tag) {
+    //Collection
+    case HID_MAIN_ITEM_TAG_BEGIN_COLLECTION:
+        ret = open_collection(parser, data &amp; 0xff);
+        break;
+    //End Collection
+    case HID_MAIN_ITEM_TAG_END_COLLECTION:
+        ret = close_collection(parser);
+        break;
+    //Input
+    case HID_MAIN_ITEM_TAG_INPUT:
+        ret = hid_add_field(parser, HID_INPUT_REPORT, data);
+        break;
+    //Outpput
+    case HID_MAIN_ITEM_TAG_OUTPUT:
+        ret = hid_add_field(parser, HID_OUTPUT_REPORT, data);
+        break;
+    //Feature
+    case HID_MAIN_ITEM_TAG_FEATURE:
+        ret = hid_add_field(parser, HID_FEATURE_REPORT, data);
+        break;
+    default:
+        dbg_hid("unknown main item tag 0x%x\n", item-&gt;tag);
+        ret = 0;
+}
+
+memset(&amp;parser-&gt;local, 0, sizeof(parser-&gt;local));   /* Reset the local parser environment */
+
+return ret;
+</code></pre>
+
+<p>}
+对Main项的解析要稍微复杂一点,Main项主要有两个部份,一个是Collection,一个是Input/Output/Feature项.
+先来看Collection项的解析.
+所有的collection信息都存放在hid_device->collection[ ]中.而Collection项又有嵌套的情况,每遇到一个Collection项就将collection的序号入栈,栈为parser_device->collection_stack[ ].栈顶指针为parser_device->collection_stack_ptr .遇到了一个end collection之后,就parser_device->collection_stack_ptr减1,表示出栈.</p>
+
+<p>熟悉这个大概的情况之后,就可以跟进open_collection()了.代码如下:
+//所有的collection都存放在hid_dev->collection 中, 而hid_dev->maxcollection 表示collection[]中的下一个空闲位置
+//paser->collection_stack[ ]存放的是当前解析的collection在hid_dev->collection[ ]中的序号
+static int open_collection(struct hid_parser <em>parser, unsigned type)
+{
+    struct hid_collection </em>collection;
+    unsigned usage;</p>
+
+<pre><code>usage = parser-&gt;local.usage[0];
+
+//colletcion嵌套过多
+if (parser-&gt;collection_stack_ptr == HID_COLLECTION_STACK_SIZE) {
+    dbg_hid("collection stack overflow\n");
+    return -1;
+}
+
+//device-&gt;maxcollection:存放的collection个数
+
+//device-&gt;collection[ ]太小,必须扩大存放空间
+if (parser-&gt;device-&gt;maxcollection == parser-&gt;device-&gt;collection_size) {
+    collection = kmalloc(sizeof(struct hid_collection) *
+            parser-&gt;device-&gt;collection_size * 2, GFP_KERNEL);
+    if (collection == NULL) {
+        dbg_hid("failed to reallocate collection array\n");
+        return -1;
+    }
+    memcpy(collection, parser-&gt;device-&gt;collection,
+        sizeof(struct hid_collection) *
+        parser-&gt;device-&gt;collection_size);
+    memset(collection + parser-&gt;device-&gt;collection_size, 0,
+        sizeof(struct hid_collection) *
+        parser-&gt;device-&gt;collection_size);
+    kfree(parser-&gt;device-&gt;collection);
+    parser-&gt;device-&gt;collection = collection;
+    parser-&gt;device-&gt;collection_size *= 2;
+}
+
+//将collection序号入栈
+parser-&gt;collection_stack[parser-&gt;collection_stack_ptr++] =
+    parser-&gt;device-&gt;maxcollection;
+
+//存入hid_device-&gt;collection[]
+collection = parser-&gt;device-&gt;collection +
+    parser-&gt;device-&gt;maxcollection++;
+collection-&gt;type = type;
+collection-&gt;usage = usage;
+//collection的深度
+collection-&gt;level = parser-&gt;collection_stack_ptr - 1;
+
+if (type == HID_COLLECTION_APPLICATION)
+    parser-&gt;device-&gt;maxapplication++;
+
+return 0;
+</code></pre>
+
+<p>}
+对照上面的分析和函数中的注释,理解这个函数应该很简单,不做详细分析.</p>
+
+<p>对于Input/Output/Feature项的解析:
+先来看一下hid_device结构的定义片段:
+struct hid_device
+{
+    ……
+    ……
+struct hid_report_enum report_enum[HID_REPORT_TYPES];
+……
+}
+对于INPUT/OUTPUT/FEATURE,每种类型都对应report_enum[ ]中的一项.
+Struct hid_report_enum定义如下:
+struct hid_report_enum {
+    unsigned numbered;
+    struct list_head report_list;
+    struct hid_report <em>report_id_hash[256];
+};
+对于每一个report_id,对应report_id_hash[ ]中的一项,同时,将所对应的hid_report添加到report_list链表中.如果有多个report_id 的情况,numbered被赋为1.
+Struct hid_report定义如下:
+struct hid_report {
+    struct list_head list;
+    unsigned id;                    /</em> id of this report <em>/
+    unsigned type;                  /</em> report type <em>/
+    struct hid_field </em>field[HID_MAX_FIELDS];    /<em> fields of the report </em>/
+    unsigned maxfield;              /<em> maximum valid field index </em>/
+    unsigned size;                  /<em> size of the report (bits) </em>/
+    struct hid_device <em>device;          /</em> associated device */
+}
+List:用来形成链表
+Id:表示report_id
+Type: INPUT/OUTPUT/FEATURE
+Field[ ]:成员列表,对应一个report_id有多个INPUT(OUTPUT/FEATURE)项
+Maxfield: field[ ]中的有效项数
+Size: 该report的大小
+Device:所属的hid_device</p>
+
+<p>了解了这些之后,就可以来看一下代码了:
+如下:
+static int hid_add_field(struct hid_parser <em>parser, unsigned report_type, unsigned flags)
+{
+    struct hid_report </em>report;
+    struct hid_field *field;
+    int usages;
+    unsigned offset;
+    int i;</p>
+
+<pre><code>//找到类型和对应report_id所在的report.如果不存在,则新建之
+if (!(report = hid_register_report(parser-&gt;device, report_type, parser-&gt;global.report_id))) {
+    dbg_hid("hid_register_report failed\n");
+    return -1;
+}
+
+//对当前global数据的有效性判断
+if (parser-&gt;global.logical_maximum &lt; parser-&gt;global.logical_minimum) {
+    dbg_hid("logical range invalid %d %d\n", parser-&gt;global.logical_minimum, parser-&gt;global.logical_maximum);
+    return -1;
+}
+
+//当前项在整个report中的数据偏移位置
+offset = report-&gt;size;
+//更新report-&gt;size
+report-&gt;size += parser-&gt;global.report_size * parser-&gt;global.report_count;
+
+//在local中没有定义usage项.该项是一个padding项
+if (!parser-&gt;local.usage_index) /* Ignore padding fields */
+    return 0;
+//计算parser-&gt;local.usage_index与parser-&gt;global.report_count的最大值
+//1: parser-&gt;global.report_count &gt;parser-&gt;local.usage_index :则后续的report项共用最后一个usage
+//2: parser-&gt;global.report_count &lt;parser-&gt;local.usage_index:在report项为Arrary类型的时候最为常
+//见.
+//3:相等的情况.每一个report项对应一个usage
+usages = max_t(int, parser-&gt;local.usage_index, parser-&gt;global.report_count);
+//注册这个report项
+if ((field = hid_register_field(report, usages, parser-&gt;global.report_count)) == NULL)
+    return 0;
+//初始化field的相关成员
+field-&gt;physical = hid_lookup_collection(parser, HID_COLLECTION_PHYSICAL);
+field-&gt;logical = hid_lookup_collection(parser, HID_COLLECTION_LOGICAL);
+field-&gt;application = hid_lookup_collection(parser, HID_COLLECTION_APPLICATION);
+//保存usage值
+for (i = 0; i &lt; usages; i++) {
+    int j = i;
+    /* Duplicate the last usage we parsed if we have excess values */
+    if (i &gt;= parser-&gt;local.usage_index)
+        j = parser-&gt;local.usage_index - 1;
+    field-&gt;usage[i].hid = parser-&gt;local.usage[j];
+    field-&gt;usage[i].collection_index =
+        parser-&gt;local.collection_index[j];
+}
+
+field-&gt;maxusage = usages;
+field-&gt;flags = flags;
+field-&gt;report_offset = offset;
+field-&gt;report_type = report_type;
+field-&gt;report_size = parser-&gt;global.report_size;
+field-&gt;report_count = parser-&gt;global.report_count;
+field-&gt;logical_minimum = parser-&gt;global.logical_minimum;
+field-&gt;logical_maximum = parser-&gt;global.logical_maximum;
+field-&gt;physical_minimum = parser-&gt;global.physical_minimum;
+field-&gt;physical_maximum = parser-&gt;global.physical_maximum;
+field-&gt;unit_exponent = parser-&gt;global.unit_exponent;
+field-&gt;unit = parser-&gt;global.unit;
+
+return 0;
+</code></pre>
+
+<p>}
+对照前面的分析和函数中的注释可以自行分析该函数.这里不再详细分析.
+另外,要注意的是在hid_parser_main()处理的最后,有这样的一段代码:
+memset(&amp;parser->local, 0, sizeof(parser->local));   /<em> Reset the local parser environment </em>/
+即把local项清0.因为一个local项目只对它下面的第一个Main有效.</p>
+
+<p>到这里,hid_parse_report()就分析完了.由于这个过程涉及到的数据结构有一点,用图的方式列出如下:</p>
+
+<p>3.1.2:hid_find_max_report()函数分析
+第二个要分析的函数是hid_find_max_report().代码如下:
+static void hid_find_max_report(struct hid_device <em>hid, unsigned int type, int </em>max)
+{
+    struct hid_report *report;
+    int size;</p>
+
+<pre><code>list_for_each_entry(report, &amp;hid-&gt;report_enum[type].report_list, list) {
+    size = ((report-&gt;size - 1) &gt;&gt; 3) + 1;
+    if (type == HID_INPUT_REPORT &amp;&amp; hid-&gt;report_enum[type].numbered)
+        size++;
+    if (*max &lt; size)
+        *max = size;
+}
+</code></pre>
+
+<p>}
+经过前面的分析,我们可以得到,对于同种类型,不同report_id的report都会链接在对应类型的hid_device->report_enum[ ] ->report_list.
+该函数就是遍历这个链表,取得最大的report size.
+在这里之所以将这个函数单独列出.是因为在这里需要注意以下两点:
+1: report->size这里存放的大小并不是以字节计数,而是位计算的
+2:在INPUT类型,并有多个report_id的情,size会加1的原因:
+  在有多个report_id的情况下,input的数据最前面有一个字节会表示它的report_id</p>
+
+<p>3.2: usbhid_init_reports()函数分析
+返回到hid_probe()中,继续来分析probe过程.分析完usb_hid_configure()之后,紧接着就是usbhid_init_reports().代码如下:
+void usbhid_init_reports(struct hid_device <em>hid)
+{
+    struct hid_report </em>report;
+    struct usbhid_device *usbhid = hid->driver_data;
+    int err, ret;</p>
+
+<pre><code>//提交INPUT类型的,in方向的urb
+list_for_each_entry(report, &amp;hid-&gt;report_enum[HID_INPUT_REPORT].report_list, list)
+    usbhid_submit_report(hid, report, USB_DIR_IN);
+//提交Feature类型的,in方向的urb
+list_for_each_entry(report, &amp;hid-&gt;report_enum[HID_FEATURE_REPORT].report_list, list)
+    usbhid_submit_report(hid, report, USB_DIR_IN);
+
+err = 0;
+//等待提交的信息传输完成.如果在定义时间内传输完成,返回0.否则-1
+ret = usbhid_wait_io(hid);
+
+//如果传输超时.清除传输的相关urb
+while (ret) {
+    err |= ret;
+    if (test_bit(HID_CTRL_RUNNING, &amp;usbhid-&gt;iofl))
+        usb_kill_urb(usbhid-&gt;urbctrl);
+    if (test_bit(HID_OUT_RUNNING, &amp;usbhid-&gt;iofl))
+        usb_kill_urb(usbhid-&gt;urbout);
+    ret = usbhid_wait_io(hid);
+}
+
+if (err)
+    warn("timeout initializing reports");
+</code></pre>
+
+<p>}
+在这里会遇到两个标志,分别是HID_CTRL_RUNNING, HID_OUT_RUNNING,表示正在提交usbhid->urbctrl和usbhid->urbout.
+跟进去看一下usbhid_submit_report()的代码.如下:
+void usbhid_submit_report(struct hid_device <em>hid, struct hid_report </em>report, unsigned char dir)
+{
+    int head;
+    unsigned long flags;
+    struct usbhid_device *usbhid = hid->driver_data;</p>
+
+<pre><code>if ((hid-&gt;quirks &amp; HID_QUIRK_NOGET) &amp;&amp; dir == USB_DIR_IN)
+    return;
+
+if (usbhid-&gt;urbout &amp;&amp; dir == USB_DIR_OUT &amp;&amp; report-&gt;type == HID_OUTPUT_REPORT) {
+
+    spin_lock_irqsave(&amp;usbhid-&gt;outlock, flags);
+
+    if ((head = (usbhid-&gt;outhead + 1) &amp; (HID_OUTPUT_FIFO_SIZE - 1)) == usbhid-&gt;outtail) {
+        spin_unlock_irqrestore(&amp;usbhid-&gt;outlock, flags);
+        warn("output queue full");
+        return;
+    }
+
+    usbhid-&gt;out[usbhid-&gt;outhead] = report;
+    usbhid-&gt;outhead = head;
+
+    if (!test_and_set_bit(HID_OUT_RUNNING, &amp;usbhid-&gt;iofl))
+        if (hid_submit_out(hid))
+            clear_bit(HID_OUT_RUNNING, &amp;usbhid-&gt;iofl);
+
+    spin_unlock_irqrestore(&amp;usbhid-&gt;outlock, flags);
+    return;
+}
+
+spin_lock_irqsave(&amp;usbhid-&gt;ctrllock, flags);
+
+//Control Queue Full
+if ((head = (usbhid-&gt;ctrlhead + 1) &amp; (HID_CONTROL_FIFO_SIZE - 1)) == usbhid-&gt;ctrltail) {
+    spin_unlock_irqrestore(&amp;usbhid-&gt;ctrllock, flags);
+    warn("control queue full");
+    return;
+}
+
+usbhid-&gt;ctrl[usbhid-&gt;ctrlhead].report = report;
+usbhid-&gt;ctrl[usbhid-&gt;ctrlhead].dir = dir;
+usbhid-&gt;ctrlhead = head;
+
+if (!test_and_set_bit(HID_CTRL_RUNNING, &amp;usbhid-&gt;iofl))
+    if (hid_submit_ctrl(hid))
+        clear_bit(HID_CTRL_RUNNING, &amp;usbhid-&gt;iofl);
+
+spin_unlock_irqrestore(&amp;usbhid-&gt;ctrllock, flags);
+</code></pre>
+
+<p>}
+这个函数有三个参数,第一个为hid,表示操作的hid_deivce.第二个参数为report,表示要操作的report,dir表示提交URB的方向.有USB_DIR_IN / USB_DIR_OUT可选.
+虽然我们在上面看到是以USB_DIR_IN调用此函数.不过在分析代码的时候,顺带把USB_DIR_OUT的情况也给分析一下.
+这个函数其实很简单,如果要提交的是OUT方向的,就将相关信息存入usbhid->out[ ]这个环形缓存区.然后调用hid_submit_out()提交hid->urbout. 如果要提交的是IN方向的,就将相关信息存放usbhid->in[ ]这个环形缓冲,然后调用hid_submit_ctrl()提交hid->urbctrl.</p>
+
+<p>分别来看一下hid_submit_out()和hid_submit_ctrl().
+static int hid_submit_out(struct hid_device <em>hid)
+{
+    struct hid_report </em>report;
+    struct usbhid_device *usbhid = hid->driver_data;</p>
+
+<pre><code>report = usbhid-&gt;out[usbhid-&gt;outtail];
+
+hid_output_report(report, usbhid-&gt;outbuf);
+usbhid-&gt;urbout-&gt;transfer_buffer_length = ((report-&gt;size - 1) &gt;&gt; 3) + 1 + (report-&gt;id &gt; 0);
+usbhid-&gt;urbout-&gt;dev = hid_to_usb_dev(hid);
+
+dbg_hid("submitting out urb\n");
+
+if (usb_submit_urb(usbhid-&gt;urbout, GFP_ATOMIC)) {
+    err_hid("usb_submit_urb(out) failed");
+    return -1;
+}
+
+return 0;
+</code></pre>
+
+<p>}
+首先从hid_device->out[ ]环形缓冲区中取得要操作的信息,然后调用hid_output_report( )将该report项的所有值存放到usbhid->outbuf中,然后将hid->urbout提交.
+不要忘记了,在初始化hid->urbout的时候,它的传输缓存区是usbhid->outbuf.另外在这里重新定义了urbout传输缓存区的大小.(在初始化的时候,它的传输长度被置为了1)</p>
+
+<p>static int hid_submit_ctrl(struct hid_device <em>hid)
+{
+    struct hid_report </em>report;
+    unsigned char dir;
+    int len;
+    struct usbhid_device *usbhid = hid->driver_data;</p>
+
+<pre><code>report = usbhid-&gt;ctrl[usbhid-&gt;ctrltail].report;
+dir = usbhid-&gt;ctrl[usbhid-&gt;ctrltail].dir;
+
+len = ((report-&gt;size - 1) &gt;&gt; 3) + 1 + (report-&gt;id &gt; 0);
+if (dir == USB_DIR_OUT) {
+    hid_output_report(report, usbhid-&gt;ctrlbuf);
+    usbhid-&gt;urbctrl-&gt;pipe = usb_sndctrlpipe(hid_to_usb_dev(hid), 0);
+    usbhid-&gt;urbctrl-&gt;transfer_buffer_length = len;
+} else {
+    int maxpacket, padlen;
+
+    usbhid-&gt;urbctrl-&gt;pipe = usb_rcvctrlpipe(hid_to_usb_dev(hid), 0);
+    maxpacket = usb_maxpacket(hid_to_usb_dev(hid), usbhid-&gt;urbctrl-&gt;pipe, 0);
+    if (maxpacket &gt; 0) {
+        padlen = DIV_ROUND_UP(len, maxpacket);
+        padlen *= maxpacket;
+        if (padlen &gt; usbhid-&gt;bufsize)
+            padlen = usbhid-&gt;bufsize;
+    } else
+        padlen = 0;
+    usbhid-&gt;urbctrl-&gt;transfer_buffer_length = padlen;
+}
+usbhid-&gt;urbctrl-&gt;dev = hid_to_usb_dev(hid);
+
+usbhid-&gt;cr-&gt;bRequestType = USB_TYPE_CLASS | USB_RECIP_INTERFACE | dir;
+usbhid-&gt;cr-&gt;bRequest = (dir == USB_DIR_OUT) ? HID_REQ_SET_REPORT : HID_REQ_GET_REPORT;
+usbhid-&gt;cr-&gt;wValue = cpu_to_le16(((report-&gt;type + 1) &lt;&lt; 8) | report-&gt;id);
+usbhid-&gt;cr-&gt;wIndex = cpu_to_le16(usbhid-&gt;ifnum);
+usbhid-&gt;cr-&gt;wLength = cpu_to_le16(len);
+
+dbg_hid("submitting ctrl urb: %s wValue=0x%04x wIndex=0x%04x wLength=%u\n",
+    usbhid-&gt;cr-&gt;bRequest == HID_REQ_SET_REPORT ? "Set_Report" : "Get_Report",
+    usbhid-&gt;cr-&gt;wValue, usbhid-&gt;cr-&gt;wIndex, usbhid-&gt;cr-&gt;wLength);
+
+if (usb_submit_urb(usbhid-&gt;urbctrl, GFP_ATOMIC)) {
+    err_hid("usb_submit_urb(ctrl) failed");
+    return -1;
+}
+
+return 0;
+</code></pre>
+
+<p>}
+不要被这里的USB_DIR_OUT和上面的hid_submit_out()情况的USB_DIR_OUT相混淆.在这里是指Feature类型的,而在上面,是指OUTPUT类型.
+在这里,是以Get_Report/Set_Report的方式接收或者向设备发送信息.
+对于OUT方向的,传输的缓存区长度即为report的大小,而对于IN方向,.每次传一个endport最大支持长度.因此,对于IN方向.可能有些填充位.
+之后.将hid->urbctrl提交.</p>
+
+<p>提交了hid->urbout和hid->urbctrl之后会做什么呢?我们来看下它们的传输完成处理函数.</p>
+
+<p>3.2.1: hid_submit_out()/hid_submit_ctrl()的后续处理
+注意下面的几个代码片段:
+static struct hid_device <em>usb_hid_configure(struct usb_interface </em>intf)
+{
+    ……
+usb_fill_int_urb(usbhid->urbout, dev, pipe, usbhid->outbuf, 0,
+                     hid_irq_out, hid, interval);
+    ……
+    usb_fill_control_urb(usbhid->urbctrl, dev, 0, (void <em>) usbhid->cr,
+                 usbhid->ctrlbuf, 1, hid_ctrl, hid);
+    ……
+}
+也就是说,如果hid->urbout和hid->urbctrl传输完成之后,分别会调用hid_irq_out()和usbhid->ctr()
+下面对这两个操作进行分析.
+Hid_irq_out()代码如下:
+static void hid_irq_out(struct urb </em>urb)
+{
+    struct hid_device <em>hid = urb->context;
+    struct usbhid_device </em>usbhid = hid->driver_data;
+    unsigned long flags;
+    int unplug = 0;</p>
+
+<pre><code>switch (urb-&gt;status) {
+    case 0:         /* success */
+        break;
+    case -ESHUTDOWN:    /* unplug */
+        unplug = 1;
+    case -EILSEQ:       /* protocol error or unplug */
+    case -EPROTO:       /* protocol error or unplug */
+    case -ECONNRESET:   /* unlink */
+    case -ENOENT:
+        break;
+    default:        /* error */
+        warn("output irq status %d received", urb-&gt;status);
+}
+
+spin_lock_irqsave(&amp;usbhid-&gt;outlock, flags);
+
+if (unplug)
+    usbhid-&gt;outtail = usbhid-&gt;outhead;
+else
+    usbhid-&gt;outtail = (usbhid-&gt;outtail + 1) &amp; (HID_OUTPUT_FIFO_SIZE - 1);
+
+if (usbhid-&gt;outhead != usbhid-&gt;outtail) {
+    if (hid_submit_out(hid)) {
+        clear_bit(HID_OUT_RUNNING, &amp;usbhid-&gt;iofl);
+        wake_up(&amp;hid-&gt;wait);
+    }
+    spin_unlock_irqrestore(&amp;usbhid-&gt;outlock, flags);
+    return;
+}
+
+clear_bit(HID_OUT_RUNNING, &amp;usbhid-&gt;iofl);
+spin_unlock_irqrestore(&amp;usbhid-&gt;outlock, flags);
+wake_up(&amp;hid-&gt;wait);
+</code></pre>
+
+<p>}
+从该代码看出,在hid->urbout传输完全之后,会取usbhid->out[ ]环形缓冲区中的数据取出.调用hid_submit_out( )再次将对应report的相关信息通过hid->urbout提交.如果缓存区中report全部处理完全或者是传输出现了错误,清除掉HID_OUT_RUNNING标志.</p>
+
+<p>hid_ctrl()代码如下:
+static void hid_ctrl(struct urb <em>urb)
+{
+    struct hid_device </em>hid = urb->context;
+    struct usbhid_device *usbhid = hid->driver_data;
+    unsigned long flags;
+    int unplug = 0;</p>
+
+<pre><code>spin_lock_irqsave(&amp;usbhid-&gt;ctrllock, flags);
+
+switch (urb-&gt;status) {
+    case 0:         /* success */
+        if (usbhid-&gt;ctrl[usbhid-&gt;ctrltail].dir == USB_DIR_IN)
+            hid_input_report(urb-&gt;context, usbhid-&gt;ctrl[usbhid-&gt;ctrltail].report-&gt;type,
+                    urb-&gt;transfer_buffer, urb-&gt;actual_length, 0);
+        break;
+    case -ESHUTDOWN:    /* unplug */
+        unplug = 1;
+    case -EILSEQ:       /* protocol error or unplug */
+    case -EPROTO:       /* protocol error or unplug */
+    case -ECONNRESET:   /* unlink */
+    case -ENOENT:
+    case -EPIPE:        /* report not available */
+        break;
+    default:        /* error */
+        warn("ctrl urb status %d received", urb-&gt;status);
+}
+
+if (unplug)
+    usbhid-&gt;ctrltail = usbhid-&gt;ctrlhead;
+else
+    usbhid-&gt;ctrltail = (usbhid-&gt;ctrltail + 1) &amp; (HID_CONTROL_FIFO_SIZE - 1);
+
+if (usbhid-&gt;ctrlhead != usbhid-&gt;ctrltail) {
+    if (hid_submit_ctrl(hid)) {
+        clear_bit(HID_CTRL_RUNNING, &amp;usbhid-&gt;iofl);
+        wake_up(&amp;hid-&gt;wait);
+    }
+    spin_unlock_irqrestore(&amp;usbhid-&gt;ctrllock, flags);
+    return;
+}
+
+clear_bit(HID_CTRL_RUNNING, &amp;usbhid-&gt;iofl);
+spin_unlock_irqrestore(&amp;usbhid-&gt;ctrllock, flags);
+wake_up(&amp;hid-&gt;wait);
+</code></pre>
+
+<p>}
+该函数的处理流程跟上面分析的hid_irq_out()差不多,不同的是,如果是IN方向的数据,则必须要调用hid_input_report()进行处理了.</p>
+
+<p>3.2.2: hid_input_report()函数分析
+hid_input_report()函数是一个很重要的函数.代码如下:
+int hid_input_report(struct hid_device <em>hid, int type, u8 </em>data, int size, int interrupt)
+{
+    struct hid_report_enum <em>report_enum = hid->report_enum + type;
+    struct hid_report </em>report;
+    int n, rsize, i;</p>
+
+<pre><code>if (!hid)
+    return -ENODEV;
+
+if (!size) {
+    dbg_hid("empty report\n");
+    return -1;
+}
+
+dbg_hid("report (size %u) (%snumbered)\n", size, report_enum-&gt;numbered ? "" : "un");
+
+n = 0;                          /* Normally report number is 0 */
+if (report_enum-&gt;numbered) {    /* Device uses numbered reports, data[0] is report number */
+    n = *data++;
+    size--;
+}
+
+/* dump the report */
+dbg_hid("report %d (size %u) = ", n, size);
+for (i = 0; i &lt; size; i++)
+    dbg_hid_line(" %02x", data[i]);
+dbg_hid_line("\n");
+
+if (!(report = report_enum-&gt;report_id_hash[n])) {
+    dbg_hid("undefined report_id %d received\n", n);
+    return -1;
+}
+
+rsize = ((report-&gt;size - 1) &gt;&gt; 3) + 1;
+
+if (size &lt; rsize) {
+    dbg_hid("report %d is too short, (%d &lt; %d)\n", report-&gt;id, size, rsize);
+    memset(data + size, 0, rsize - size);
+}
+
+if ((hid-&gt;claimed &amp; HID_CLAIMED_HIDDEV) &amp;&amp; hid-&gt;hiddev_report_event)
+    hid-&gt;hiddev_report_event(hid, report);
+if (hid-&gt;claimed &amp; HID_CLAIMED_HIDRAW)
+    hidraw_report_event(hid, data, size);
+
+for (n = 0; n &lt; report-&gt;maxfield; n++)
+    hid_input_field(hid, report-&gt;field[n], data, interrupt);
+
+if (hid-&gt;claimed &amp; HID_CLAIMED_INPUT)
+    hidinput_report_event(hid, report);
+
+return 0;
+</code></pre>
+
+<p>}
+首先判断report_enum->numbered是否为1,如果为1,则说明该report类型有多个report_id.那INPUT传回来的数据的第一个字节是report_id值.
+根据report的类型和report_id就可以在hid_device中找到相应的report了.
+如果传回来的数据比report size要小,就把后面的无效数据全部置为0.
+然后,对于HID_CLAIMED_HIDDEV和HID_CLAIMED_HIDRAW是选择编译部份,忽略这一部份.
+如果一个设备是INPUT设备,我们会在后面看到,会在hid->claimed设置HID_CLAIMED_INPUT标志.
+对于hidinput_report_event()函数十分简单,就是将hid关联的input_deivce全部发送EV_SYN.表示上报的信息已经结束了.</p>
+
+<p>最后,我们要分析的重点就是下面的这段代码:
+    for (n = 0; n &lt; report->maxfield; n++)
+        hid_input_field(hid, report->field[n], data, interrupt);
+在这里会涉及到hid_deivce和input_deivce的关联,所以我们先留个尾巴.等分析完后面的流程再来分析.</p>
+
+<p>3.3:hidinput_connect()函数分析
+返回hid_probe().继续下面的流程,调用usbhid_init_reports()之后,接着的一个重要的操作就是hidinput_connect().这是我们对porbe过程最后要分析的函数了.
+代码如下:
+int hidinput_connect(struct hid_device <em>hid)
+{
+    struct hid_report </em>report;
+    struct hid_input <em>hidinput = NULL;
+    struct input_dev </em>input_dev;
+    int i, j, k;
+    int max_report_type = HID_OUTPUT_REPORT;</p>
+
+<pre><code>if (hid-&gt;quirks &amp; HID_QUIRK_IGNORE_HIDINPUT)
+    return -1;
+//初始化hid-&gt;inputs链表
+INIT_LIST_HEAD(&amp;hid-&gt;inputs);
+
+for (i = 0; i &lt; hid-&gt;maxcollection; i++)
+    if (hid-&gt;collection[i].type == HID_COLLECTION_APPLICATION ||
+        hid-&gt;collection[i].type == HID_COLLECTION_PHYSICAL)
+        if (IS_INPUT_APPLICATION(hid-&gt;collection[i].usage))
+            break;
+
+if (i == hid-&gt;maxcollection &amp;&amp; (hid-&gt;quirks &amp; HID_QUIRK_HIDINPUT) == 0)
+    return -1;
+
+if (hid-&gt;quirks &amp; HID_QUIRK_SKIP_OUTPUT_REPORTS)
+    max_report_type = HID_INPUT_REPORT;
+
+for (k = HID_INPUT_REPORT; k &lt;= max_report_type; k++)
+    list_for_each_entry(report, &amp;hid-&gt;report_enum[k].report_list, list) {
+
+        if (!report-&gt;maxfield)
+            continue;
+
+        //如果不存在hidinput,分配并初始化它,并将其链入hid-&lt;inputs链表
+        if (!hidinput) {
+            hidinput = kzalloc(sizeof(*hidinput), GFP_KERNEL);
+            input_dev = input_allocate_device();
+            if (!hidinput || !input_dev) {
+                kfree(hidinput);
+                input_free_device(input_dev);
+                err_hid("Out of memory during hid input probe");
+                goto out_unwind;
+            }
+
+            input_set_drvdata(input_dev, hid);
+            input_dev-&gt;event = hid-&gt;hidinput_input_event;
+            input_dev-&gt;open = hidinput_open;
+            input_dev-&gt;close = hidinput_close;
+            input_dev-&gt;setkeycode = hidinput_setkeycode;
+            input_dev-&gt;getkeycode = hidinput_getkeycode;
+
+            input_dev-&gt;name = hid-&gt;name;
+            input_dev-&gt;phys = hid-&gt;phys;
+            input_dev-&gt;uniq = hid-&gt;uniq;
+            input_dev-&gt;id.bustype = hid-&gt;bus;
+            input_dev-&gt;id.vendor  = hid-&gt;vendor;
+            input_dev-&gt;id.product = hid-&gt;product;
+            input_dev-&gt;id.version = hid-&gt;version;
+            input_dev-&gt;dev.parent = hid-&gt;dev;
+            hidinput-&gt;input = input_dev;
+            list_add_tail(&amp;hidinput-&gt;list, &amp;hid-&gt;inputs);
+        }
+
+        //遍历report的filed项
+        for (i = 0; i &lt; report-&gt;maxfield; i++)
+            //遍历filed中的usage
+            for (j = 0; j &lt; report-&gt;field[i]-&gt;maxusage; j++)
+                hidinput_configure_usage(hidinput, report-&gt;field[i],
+                             report-&gt;field[i]-&gt;usage + j);
+
+        if (hid-&gt;quirks &amp; HID_QUIRK_MULTI_INPUT) {
+            /* This will leave hidinput NULL, so that it
+             * allocates another one if we have more inputs on
+             * the same interface. Some devices (e.g. Happ's
+             * UGCI) cram a lot of unrelated inputs into the
+             * same interface. */
+            hidinput-&gt;report = report;
+            if (input_register_device(hidinput-&gt;input))
+                goto out_cleanup;
+            hidinput = NULL;
+        }
+    }
+
+//注册这个input_device
+if (hidinput &amp;&amp; input_register_device(hidinput-&gt;input))
+    goto out_cleanup;
+
+return 0;
+</code></pre>
+
+<p>out_cleanup:
+    input_free_device(hidinput->input);
+    kfree(hidinput);
+out_unwind:
+    /<em> unwind the ones we already registered </em>/
+    hidinput_disconnect(hid);</p>
+
+<pre><code>return -1;
+</code></pre>
+
+<p>}
+很容易看出,这个函数的重点是在中间的那个for循环上,
+首先.如果hidinput为空.分配空间并初始化它,同时,分配并初始化hidinput->input域.然后将该hidinput链接到hid_deivce->inputs链表.
+另外,从代码中看出.如果hid->quirks中没有定义HID_QUIRK_MULTI_INPUT.那hidinput只会初始化一次,对应的,hid_deivce->inputs链表上只有一个hidinput.</p>
+
+<p>跟踪hidinput_configure_usage().代码如下:
+static void hidinput_configure_usage(struct hid_input <em>hidinput, struct hid_field </em>field,
+                     struct hid_usage <em>usage)
+{
+    struct input_dev </em>input = hidinput->input;
+    struct hid_device <em>device = input_get_drvdata(input);
+    int max = 0, code, ret;
+    unsigned long </em>bit = NULL;</p>
+
+<pre><code>//使field的hidinput域指向hidinput
+field-&gt;hidinput = hidinput;
+
+//Debug,忽略
+dbg_hid("Mapping: ");
+hid_resolv_usage(usage-&gt;hid);
+dbg_hid_line(" ---&gt; ");
+
+if (field-&gt;flags &amp; HID_MAIN_ITEM_CONSTANT)
+    goto ignore;
+
+/* only LED usages are supported in output fields */
+//如果是否个输出设备但却不是LED,忽略
+if (field-&gt;report_type == HID_OUTPUT_REPORT &amp;&amp;
+        (usage-&gt;hid &amp; HID_USAGE_PAGE) != HID_UP_LED) {
+    dbg_hid_line(" [non-LED output field] ");
+    goto ignore;
+}
+
+/* handle input mappings for quirky devices */
+//关于quirks的东东,忽略
+ret = hidinput_mapping_quirks(usage, input, &amp;bit, &amp;max);
+if (ret)
+    goto mapped;
+
+//取usage的高16位,即usage_page
+switch (usage-&gt;hid &amp; HID_USAGE_PAGE) {
+
+    case HID_UP_UNDEFINED:
+        goto ignore;
+    //键盘类型的设备
+    case HID_UP_KEYBOARD:
+
+        //使input device支持重复按键
+        set_bit(EV_REP, input-&gt;evbit);
+
+        if ((usage-&gt;hid &amp; HID_USAGE) &lt; 256) {
+            if (!hid_keyboard[usage-&gt;hid &amp; HID_USAGE]) goto ignore;
+            map_key_clear(hid_keyboard[usage-&gt;hid &amp; HID_USAGE]);
+        } else
+            map_key(KEY_UNKNOWN);
+
+        break;
+
+    case HID_UP_BUTTON:
+
+        code = ((usage-&gt;hid - 1) &amp; 0xf);
+
+        switch (field-&gt;application) {
+            case HID_GD_MOUSE:
+            case HID_GD_POINTER:  code += 0x110; break;
+            case HID_GD_JOYSTICK: code += 0x120; break;
+            case HID_GD_GAMEPAD:  code += 0x130; break;
+            default:
+                switch (field-&gt;physical) {
+                    case HID_GD_MOUSE:
+                    case HID_GD_POINTER:  code += 0x110; break;
+                    case HID_GD_JOYSTICK: code += 0x120; break;
+                    case HID_GD_GAMEPAD:  code += 0x130; break;
+                    default:              code += 0x100;
+                }
+        }
+
+        /* Special handling for Logitech Cordless Desktop */
+        if (field-&gt;application != HID_GD_MOUSE) {
+            if (device-&gt;quirks &amp; HID_QUIRK_LOGITECH_EXPANDED_KEYMAP) {
+                int hid = usage-&gt;hid &amp; HID_USAGE;
+                if (hid &lt; LOGITECH_EXPANDED_KEYMAP_SIZE &amp;&amp; logitech_expanded_keymap[hid] != 0)
+                    code = logitech_expanded_keymap[hid];
+            }
+        } else {
+            if (device-&gt;quirks &amp; HID_QUIRK_LOGITECH_IGNORE_DOUBLED_WHEEL) {
+                int hid = usage-&gt;hid &amp; HID_USAGE;
+                if (hid == 7 || hid == 8)
+                    goto ignore;
+            }
+        }
+
+        map_key(code);
+        break;
+
+
+    case HID_UP_SIMULATION:
+
+        switch (usage-&gt;hid &amp; 0xffff) {
+            case 0xba: map_abs(ABS_RUDDER);   break;
+            case 0xbb: map_abs(ABS_THROTTLE); break;
+            case 0xc4: map_abs(ABS_GAS);      break;
+            case 0xc5: map_abs(ABS_BRAKE);    break;
+            case 0xc8: map_abs(ABS_WHEEL);    break;
+            default:   goto ignore;
+        }
+        break;
+
+    case HID_UP_GENDESK:
+
+        if ((usage-&gt;hid &amp; 0xf0) == 0x80) {  /* SystemControl */
+            switch (usage-&gt;hid &amp; 0xf) {
+                case 0x1: map_key_clear(KEY_POWER);  break;
+                case 0x2: map_key_clear(KEY_SLEEP);  break;
+                case 0x3: map_key_clear(KEY_WAKEUP); break;
+                default: goto unknown;
+            }
+            break;
+        }
+
+        if ((usage-&gt;hid &amp; 0xf0) == 0x90) {  /* D-pad */
+            switch (usage-&gt;hid) {
+                case HID_GD_UP:    usage-&gt;hat_dir = 1; break;
+                case HID_GD_DOWN:  usage-&gt;hat_dir = 5; break;
+                case HID_GD_RIGHT: usage-&gt;hat_dir = 3; break;
+                case HID_GD_LEFT:  usage-&gt;hat_dir = 7; break;
+                default: goto unknown;
+            }
+            if (field-&gt;dpad) {
+                map_abs(field-&gt;dpad);
+                goto ignore;
+            }
+            map_abs(ABS_HAT0X);
+            break;
+        }
+
+        switch (usage-&gt;hid) {
+
+            /* These usage IDs map directly to the usage codes. */
+            case HID_GD_X: case HID_GD_Y: case HID_GD_Z:
+            case HID_GD_RX: case HID_GD_RY: case HID_GD_RZ:
+            case HID_GD_SLIDER: case HID_GD_DIAL: case HID_GD_WHEEL:
+                if (field-&gt;flags &amp; HID_MAIN_ITEM_RELATIVE)
+                    map_rel(usage-&gt;hid &amp; 0xf);
+                else
+                    map_abs(usage-&gt;hid &amp; 0xf);
+                break;
+
+            case HID_GD_HATSWITCH:
+                usage-&gt;hat_min = field-&gt;logical_minimum;
+                usage-&gt;hat_max = field-&gt;logical_maximum;
+                map_abs(ABS_HAT0X);
+                break;
+
+            case HID_GD_START:  map_key_clear(BTN_START);   break;
+            case HID_GD_SELECT: map_key_clear(BTN_SELECT);  break;
+
+            default: goto unknown;
+        }
+
+        break;
+
+    case HID_UP_LED:
+
+        switch (usage-&gt;hid &amp; 0xffff) {                        /* HID-Value:                   */
+            case 0x01:  map_led (LED_NUML);     break;    /*   "Num Lock"                 */
+            case 0x02:  map_led (LED_CAPSL);    break;    /*   "Caps Lock"                */
+            case 0x03:  map_led (LED_SCROLLL);  break;    /*   "Scroll Lock"              */
+            case 0x04:  map_led (LED_COMPOSE);  break;    /*   "Compose"                  */
+            case 0x05:  map_led (LED_KANA);     break;    /*   "Kana"                     */
+            case 0x27:  map_led (LED_SLEEP);    break;    /*   "Stand-By"                 */
+            case 0x4c:  map_led (LED_SUSPEND);  break;    /*   "System Suspend"           */
+            case 0x09:  map_led (LED_MUTE);     break;    /*   "Mute"                     */
+            case 0x4b:  map_led (LED_MISC);     break;    /*   "Generic Indicator"        */
+            case 0x19:  map_led (LED_MAIL);     break;    /*   "Message Waiting"          */
+            case 0x4d:  map_led (LED_CHARGING); break;    /*   "External Power Connected" */
+
+            default: goto ignore;
+        }
+        break;
+
+    case HID_UP_DIGITIZER:
+
+        switch (usage-&gt;hid &amp; 0xff) {
+
+            case 0x30: /* TipPressure */
+                if (!test_bit(BTN_TOUCH, input-&gt;keybit)) {
+                    device-&gt;quirks |= HID_QUIRK_NOTOUCH;
+                    set_bit(EV_KEY, input-&gt;evbit);
+                    set_bit(BTN_TOUCH, input-&gt;keybit);
+                }
+
+                map_abs_clear(ABS_PRESSURE);
+                break;
+
+            case 0x32: /* InRange */
+                switch (field-&gt;physical &amp; 0xff) {
+                    case 0x21: map_key(BTN_TOOL_MOUSE); break;
+                    case 0x22: map_key(BTN_TOOL_FINGER); break;
+                    default: map_key(BTN_TOOL_PEN); break;
+                }
+                break;
+
+            case 0x3c: /* Invert */
+                map_key_clear(BTN_TOOL_RUBBER);
+                break;
+
+            case 0x33: /* Touch */
+            case 0x42: /* TipSwitch */
+            case 0x43: /* TipSwitch2 */
+                device-&gt;quirks &amp;= ~HID_QUIRK_NOTOUCH;
+                map_key_clear(BTN_TOUCH);
+                break;
+
+            case 0x44: /* BarrelSwitch */
+                map_key_clear(BTN_STYLUS);
+                break;
+
+            default:  goto unknown;
+        }
+        break;
+
+    case HID_UP_CONSUMER:   /* USB HUT v1.1, pages 56-62 */
+
+        switch (usage-&gt;hid &amp; HID_USAGE) {
+            case 0x000: goto ignore;
+            case 0x034: map_key_clear(KEY_SLEEP);       break;
+            case 0x036: map_key_clear(BTN_MISC);        break;
+
+            case 0x040: map_key_clear(KEY_MENU);        break;
+            case 0x045: map_key_clear(KEY_RADIO);       break;
+
+            case 0x083: map_key_clear(KEY_LAST);        break;
+            case 0x088: map_key_clear(KEY_PC);      break;
+            case 0x089: map_key_clear(KEY_TV);      break;
+            case 0x08a: map_key_clear(KEY_WWW);     break;
+            case 0x08b: map_key_clear(KEY_DVD);     break;
+            case 0x08c: map_key_clear(KEY_PHONE);       break;
+            case 0x08d: map_key_clear(KEY_PROGRAM);     break;
+            case 0x08e: map_key_clear(KEY_VIDEOPHONE);  break;
+            case 0x08f: map_key_clear(KEY_GAMES);       break;
+            case 0x090: map_key_clear(KEY_MEMO);        break;
+            case 0x091: map_key_clear(KEY_CD);      break;
+            case 0x092: map_key_clear(KEY_VCR);     break;
+            case 0x093: map_key_clear(KEY_TUNER);       break;
+            case 0x094: map_key_clear(KEY_EXIT);        break;
+            case 0x095: map_key_clear(KEY_HELP);        break;
+            case 0x096: map_key_clear(KEY_TAPE);        break;
+            case 0x097: map_key_clear(KEY_TV2);     break;
+            case 0x098: map_key_clear(KEY_SAT);     break;
+            case 0x09a: map_key_clear(KEY_PVR);     break;
+
+            case 0x09c: map_key_clear(KEY_CHANNELUP);   break;
+            case 0x09d: map_key_clear(KEY_CHANNELDOWN); break;
+            case 0x0a0: map_key_clear(KEY_VCR2);        break;
+
+            case 0x0b0: map_key_clear(KEY_PLAY);        break;
+            case 0x0b1: map_key_clear(KEY_PAUSE);       break;
+            case 0x0b2: map_key_clear(KEY_RECORD);      break;
+            case 0x0b3: map_key_clear(KEY_FASTFORWARD); break;
+            case 0x0b4: map_key_clear(KEY_REWIND);      break;
+            case 0x0b5: map_key_clear(KEY_NEXTSONG);    break;
+            case 0x0b6: map_key_clear(KEY_PREVIOUSSONG);    break;
+            case 0x0b7: map_key_clear(KEY_STOPCD);      break;
+            case 0x0b8: map_key_clear(KEY_EJECTCD);     break;
+
+            case 0x0cd: map_key_clear(KEY_PLAYPAUSE);   break;
+                case 0x0e0: map_abs_clear(ABS_VOLUME);       break;
+            case 0x0e2: map_key_clear(KEY_MUTE);        break;
+            case 0x0e5: map_key_clear(KEY_BASSBOOST);   break;
+            case 0x0e9: map_key_clear(KEY_VOLUMEUP);    break;
+            case 0x0ea: map_key_clear(KEY_VOLUMEDOWN);  break;
+
+            case 0x182: map_key_clear(KEY_BOOKMARKS);   break;
+            case 0x183: map_key_clear(KEY_CONFIG);      break;
+            case 0x184: map_key_clear(KEY_WORDPROCESSOR);   break;
+            case 0x185: map_key_clear(KEY_EDITOR);      break;
+            case 0x186: map_key_clear(KEY_SPREADSHEET); break;
+            case 0x187: map_key_clear(KEY_GRAPHICSEDITOR);  break;
+            case 0x188: map_key_clear(KEY_PRESENTATION);    break;
+            case 0x189: map_key_clear(KEY_DATABASE);    break;
+            case 0x18a: map_key_clear(KEY_MAIL);        break;
+            case 0x18b: map_key_clear(KEY_NEWS);        break;
+            case 0x18c: map_key_clear(KEY_VOICEMAIL);   break;
+            case 0x18d: map_key_clear(KEY_ADDRESSBOOK); break;
+            case 0x18e: map_key_clear(KEY_CALENDAR);    break;
+            case 0x191: map_key_clear(KEY_FINANCE);     break;
+            case 0x192: map_key_clear(KEY_CALC);        break;
+            case 0x194: map_key_clear(KEY_FILE);        break;
+            case 0x196: map_key_clear(KEY_WWW);     break;
+            case 0x19c: map_key_clear(KEY_LOGOFF);      break;
+            case 0x19e: map_key_clear(KEY_COFFEE);      break;
+            case 0x1a6: map_key_clear(KEY_HELP);        break;
+            case 0x1a7: map_key_clear(KEY_DOCUMENTS);   break;
+            case 0x1ab: map_key_clear(KEY_SPELLCHECK);  break;
+            case 0x1b6: map_key_clear(KEY_MEDIA);       break;
+            case 0x1b7: map_key_clear(KEY_SOUND);       break;
+            case 0x1bc: map_key_clear(KEY_MESSENGER);   break;
+            case 0x1bd: map_key_clear(KEY_INFO);        break;
+            case 0x201: map_key_clear(KEY_NEW);     break;
+            case 0x202: map_key_clear(KEY_OPEN);        break;
+            case 0x203: map_key_clear(KEY_CLOSE);       break;
+            case 0x204: map_key_clear(KEY_EXIT);        break;
+            case 0x207: map_key_clear(KEY_SAVE);        break;
+            case 0x208: map_key_clear(KEY_PRINT);       break;
+            case 0x209: map_key_clear(KEY_PROPS);       break;
+            case 0x21a: map_key_clear(KEY_UNDO);        break;
+            case 0x21b: map_key_clear(KEY_COPY);        break;
+            case 0x21c: map_key_clear(KEY_CUT);     break;
+            case 0x21d: map_key_clear(KEY_PASTE);       break;
+            case 0x21f: map_key_clear(KEY_FIND);        break;
+            case 0x221: map_key_clear(KEY_SEARCH);      break;
+            case 0x222: map_key_clear(KEY_GOTO);        break;
+            case 0x223: map_key_clear(KEY_HOMEPAGE);    break;
+            case 0x224: map_key_clear(KEY_BACK);        break;
+            case 0x225: map_key_clear(KEY_FORWARD);     break;
+            case 0x226: map_key_clear(KEY_STOP);        break;
+            case 0x227: map_key_clear(KEY_REFRESH);     break;
+            case 0x22a: map_key_clear(KEY_BOOKMARKS);   break;
+            case 0x22d: map_key_clear(KEY_ZOOMIN);      break;
+            case 0x22e: map_key_clear(KEY_ZOOMOUT);     break;
+            case 0x22f: map_key_clear(KEY_ZOOMRESET);   break;
+            case 0x233: map_key_clear(KEY_SCROLLUP);    break;
+            case 0x234: map_key_clear(KEY_SCROLLDOWN);  break;
+            case 0x238: map_rel(REL_HWHEEL);        break;
+            case 0x25f: map_key_clear(KEY_CANCEL);      break;
+            case 0x279: map_key_clear(KEY_REDO);        break;
+
+            case 0x289: map_key_clear(KEY_REPLY);       break;
+            case 0x28b: map_key_clear(KEY_FORWARDMAIL); break;
+            case 0x28c: map_key_clear(KEY_SEND);        break;
+
+            default:    goto ignore;
+        }
+        break;
+
+    case HID_UP_HPVENDOR:   /* Reported on a Dutch layout HP5308 */
+
+        set_bit(EV_REP, input-&gt;evbit);
+        switch (usage-&gt;hid &amp; HID_USAGE) {
+                case 0x021: map_key_clear(KEY_PRINT);           break;
+            case 0x070: map_key_clear(KEY_HP);      break;
+            case 0x071: map_key_clear(KEY_CAMERA);      break;
+            case 0x072: map_key_clear(KEY_SOUND);       break;
+            case 0x073: map_key_clear(KEY_QUESTION);    break;
+            case 0x080: map_key_clear(KEY_EMAIL);       break;
+            case 0x081: map_key_clear(KEY_CHAT);        break;
+            case 0x082: map_key_clear(KEY_SEARCH);      break;
+            case 0x083: map_key_clear(KEY_CONNECT);         break;
+            case 0x084: map_key_clear(KEY_FINANCE);     break;
+            case 0x085: map_key_clear(KEY_SPORT);       break;
+            case 0x086: map_key_clear(KEY_SHOP);            break;
+            default:    goto ignore;
+        }
+        break;
+
+    case HID_UP_MSVENDOR:
+
+        goto ignore;
+
+    case HID_UP_CUSTOM: /* Reported on Logitech and Apple USB keyboards */
+
+        set_bit(EV_REP, input-&gt;evbit);
+        switch(usage-&gt;hid &amp; HID_USAGE) {
+            case 0x003:
+                /* The fn key on Apple USB keyboards */
+                map_key_clear(KEY_FN);
+                hidinput_apple_setup(input);
+                break;
+
+            default:    goto ignore;
+        }
+        break;
+
+    case HID_UP_LOGIVENDOR:
+
+        goto ignore;
+
+    case HID_UP_PID:
+
+        switch(usage-&gt;hid &amp; HID_USAGE) {
+            case 0xa4: map_key_clear(BTN_DEAD); break;
+            default: goto ignore;
+        }
+        break;
+
+    default:
+    unknown:
+        if (field-&gt;report_size == 1) {
+            if (field-&gt;report-&gt;type == HID_OUTPUT_REPORT) {
+                map_led(LED_MISC);
+                break;
+            }
+            map_key(BTN_MISC);
+            break;
+        }
+        if (field-&gt;flags &amp; HID_MAIN_ITEM_RELATIVE) {
+            map_rel(REL_MISC);
+            break;
+        }
+        map_abs(ABS_MISC);
+        break;
+}
+</code></pre>
+
+<p>mapped:
+    if (device->quirks &amp; HID_QUIRK_MIGHTYMOUSE) {
+        if (usage->hid == HID_GD_Z)
+            map_rel(REL_HWHEEL);
+        else if (usage->code == BTN_1)
+            map_key(BTN_2);
+        else if (usage->code == BTN_2)
+            map_key(BTN_1);
+    }</p>
+
+<pre><code>if ((device-&gt;quirks &amp; (HID_QUIRK_2WHEEL_MOUSE_HACK_7 | HID_QUIRK_2WHEEL_MOUSE_HACK_5 |
+        HID_QUIRK_2WHEEL_MOUSE_HACK_B8)) &amp;&amp; (usage-&gt;type == EV_REL) &amp;&amp;
+        (usage-&gt;code == REL_WHEEL))
+    set_bit(REL_HWHEEL, bit);
+
+if (((device-&gt;quirks &amp; HID_QUIRK_2WHEEL_MOUSE_HACK_5) &amp;&amp; (usage-&gt;hid == 0x00090005))
+    || ((device-&gt;quirks &amp; HID_QUIRK_2WHEEL_MOUSE_HACK_7) &amp;&amp; (usage-&gt;hid == 0x00090007)))
+    goto ignore;
+
+if ((device-&gt;quirks &amp; HID_QUIRK_BAD_RELATIVE_KEYS) &amp;&amp;
+    usage-&gt;type == EV_KEY &amp;&amp; (field-&gt;flags &amp; HID_MAIN_ITEM_RELATIVE))
+    field-&gt;flags &amp;= ~HID_MAIN_ITEM_RELATIVE;
+
+set_bit(usage-&gt;type, input-&gt;evbit);
+
+if (device-&gt;quirks &amp; HID_QUIRK_DUPLICATE_USAGES &amp;&amp;
+        (usage-&gt;type == EV_KEY ||
+         usage-&gt;type == EV_REL ||
+         usage-&gt;type == EV_ABS))
+    clear_bit(usage-&gt;code, bit);
+
+while (usage-&gt;code &lt;= max &amp;&amp; test_and_set_bit(usage-&gt;code, bit))
+    usage-&gt;code = find_next_zero_bit(bit, max + 1, usage-&gt;code);
+
+if (usage-&gt;code &gt; max)
+    goto ignore;
+
+
+if (usage-&gt;type == EV_ABS) {
+
+    int a = field-&gt;logical_minimum;
+    int b = field-&gt;logical_maximum;
+
+    if ((device-&gt;quirks &amp; HID_QUIRK_BADPAD) &amp;&amp; (usage-&gt;code == ABS_X || usage-&gt;code == ABS_Y)) {
+        a = field-&gt;logical_minimum = 0;
+        b = field-&gt;logical_maximum = 255;
+    }
+
+    if (field-&gt;application == HID_GD_GAMEPAD || field-&gt;application == HID_GD_JOYSTICK)
+        input_set_abs_params(input, usage-&gt;code, a, b, (b - a) &gt;&gt; 8, (b - a) &gt;&gt; 4);
+    else    input_set_abs_params(input, usage-&gt;code, a, b, 0, 0);
+
+}
+
+if (usage-&gt;type == EV_ABS &amp;&amp;
+    (usage-&gt;hat_min &lt; usage-&gt;hat_max || usage-&gt;hat_dir)) {
+    int i;
+    for (i = usage-&gt;code; i &lt; usage-&gt;code + 2 &amp;&amp; i &lt;= max; i++) {
+        input_set_abs_params(input, i, -1, 1, 0, 0);
+        set_bit(i, input-&gt;absbit);
+    }
+    if (usage-&gt;hat_dir &amp;&amp; !field-&gt;dpad)
+        field-&gt;dpad = usage-&gt;code;
+}
+
+/* for those devices which produce Consumer volume usage as relative,
+ * we emulate pressing volumeup/volumedown appropriate number of times
+ * in hidinput_hid_event()
+ */
+if ((usage-&gt;type == EV_ABS) &amp;&amp; (field-&gt;flags &amp; HID_MAIN_ITEM_RELATIVE) &amp;&amp;
+        (usage-&gt;code == ABS_VOLUME)) {
+    set_bit(KEY_VOLUMEUP, input-&gt;keybit);
+    set_bit(KEY_VOLUMEDOWN, input-&gt;keybit);
+}
+
+if (usage-&gt;type == EV_KEY) {
+    set_bit(EV_MSC, input-&gt;evbit);
+    set_bit(MSC_SCAN, input-&gt;mscbit);
+}
+
+hid_resolv_event(usage-&gt;type, usage-&gt;code);
+
+dbg_hid_line("\n");
+
+return;
+</code></pre>
+
+<p>ignore:
+    dbg_hid_line("IGNORED\n");
+    return;
+}
+乍看之下,这个函数超长,为们以keyboad为例,对它进行分析,同时忽略掉quirks和调试信息以及一些无关的操作.代码就缩减成下面这样了:
+……
+……
+switch (usage->hid &amp; HID_USAGE_PAGE) {</p>
+
+<pre><code>    case HID_UP_UNDEFINED:
+        goto ignore;
+    //键盘类型的设备
+    case HID_UP_KEYBOARD:
+        //使input device支持重复按键
+        set_bit(EV_REP, input-&gt;evbit);
+
+        if ((usage-&gt;hid &amp; HID_USAGE) &lt; 256) {
+            if (!hid_keyboard[usage-&gt;hid &amp; HID_USAGE]) goto ignore;
+            map_key_clear(hid_keyboard[usage-&gt;hid &amp; HID_USAGE]);
+        } else
+            map_key(KEY_UNKNOWN);
+
+        break;
+    ……
+    ……
+</code></pre>
+
+<p>}
+mapped:</p>
+
+<pre><code>set_bit(usage-&gt;type, input-&gt;evbit);
+while (usage-&gt;code &lt;= max &amp;&amp; test_and_set_bit(usage-&gt;code, bit))
+    usage-&gt;code = find_next_zero_bit(bit, max + 1, usage-&gt;code);
+
+if (usage-&gt;code &gt; max)
+    goto ignore;
+……
+……
+if (usage-&gt;type == EV_KEY) {
+    set_bit(EV_MSC, input-&gt;evbit);
+    set_bit(MSC_SCAN, input-&gt;mscbit);
+}
+……
+……
+return;
+</code></pre>
+
+<p>ignore:
+    dbg_hid_line("IGNORED\n");
+    return;
+}
+关于键盘这部份的usage 定义请自行参考 USB HID Usage Tables sepc.对照hid_keyboard[ ]和键盘的扫描码可以得知,其实hid_keyboard[ ]就是定义了按键的扫描码.
+如果filed的usage在hid_keyboard[ ]中有定义,则表示该设备支持这个类型的按键.在代码中,也就是会调用map_key_clear().跟踪看一下它的定义:</p>
+
+<h1>define map_key_clear(c)        do { map_key(c); clear_bit(c, bit); } while (0)</h1>
+
+<h1>define map_key(c)  do { usage->code = c; usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX; } while (0)</h1>
+
+<p>假设该设备支持的按键为C.则经过map_key_clear()后会变成:
+Usage->code = C
+Usage->type=EV_KEY
+Bit 为input->keybit所支持的按键类型,不过已经将C位清除了.</p>
+
+<p>接下来,在hidinput_configure_usage()函数中调用
+set_bit(usage->type, input->evbit)
+即让input device 支持EV_KEY事件</p>
+
+<p>然后经过下列语句:
+while (usage->code &lt;= max &amp;&amp; test_and_set_bit(usage->code, bit))
+        usage->code = find_next_zero_bit(bit, max + 1, usage->code);
+会在bit中设置usage->code.即上面例子中的按键C.因为在前面已经在bit中usage->code清除.因此test_and_set_bit(usage->code, bit)是不会满足的.</p>
+
+<p>最后会调用以下语句:
+    if (usage->type == EV_KEY) {
+        set_bit(EV_MSC, input->evbit);
+        set_bit(MSC_SCAN, input->mscbit);
+    }
+即设置input_deivce的evbit和mscbit位.
+到这里,这个函数已经分析完了.至于keyboard以外的设备,对照usage table spec,也很容易弄得,为了节省篇幅,这里就不将各种设备一一列出.</p>
+
+<p>3.4:关于HID中的input_device操作
+在前面分析hidinput_connect看到了hid的input_device初始化过程.为了描述方便，将相关的代码列出如下：
+                input_dev->event = hid->hidinput_input_event;
+                input_dev->open = hidinput_open;
+                input_dev->close = hidinput_close;
+                input_dev->setkeycode = hidinput_setkeycode;
+                input_dev->getkeycode = hidinput_getkeycode;</p>
+
+<p>结合之前对input子系统的分析。所有的input device都会被终端控制台的input_handler匹配。在匹配过程中，会调用input_device->open。对这个过程不太清楚的，请参阅本站关于input子系统分析的文档。</p>
+
+<p>对应的,open的接口如下示：
+static int hidinput_open(struct input_dev <em>dev)
+{
+    struct hid_device </em>hid = input_get_drvdata(dev);</p>
+
+<pre><code>return hid-&gt;hid_open(hid);
+</code></pre>
+
+<p>}
+由此可见，它会转换到hid_device->open()。
+在usb_hid_configure()中，hid_device的信息初始化如下：
+static struct hid_device <em>usb_hid_configure(struct usb_interface </em>intf)
+{
+    ……
+    hid->hid_open = usbhid_open;
+    hid->hid_close = usbhid_close;</p>
+
+<h1>ifdef CONFIG_USB_HIDDEV</h1>
+
+<pre><code>hid-&gt;hiddev_hid_event = hiddev_hid_event;
+hid-&gt;hiddev_report_event = hiddev_report_event;
+</code></pre>
+
+<h1>endif</h1>
+
+<pre><code>hid-&gt;hid_output_raw_report = usbhid_output_raw_report;
+return hid;
+……
+</code></pre>
+
+<p>}
+相应的接口如下示：
+int usbhid_open(struct hid_device <em>hid)
+{
+    struct usbhid_device </em>usbhid = hid->driver_data;
+    int res;</p>
+
+<pre><code>if (!hid-&gt;open++) {
+    res = usb_autopm_get_interface(usbhid-&gt;intf);
+    if (res &lt; 0) {
+        hid-&gt;open--;
+        return -EIO;
+    }
+}
+if (hid_start_in(hid))
+    hid_io_error(hid);
+return 0;
+</code></pre>
+
+<p>}
+这个函数里会调用hid_start_in().代码如下：
+static int hid_start_in(struct hid_device <em>hid)
+{
+    unsigned long flags;
+    int rc = 0;
+    struct usbhid_device </em>usbhid = hid->driver_data;</p>
+
+<pre><code>spin_lock_irqsave(&amp;usbhid-&gt;inlock, flags);
+if (hid-&gt;open &gt; 0 &amp;&amp; !test_bit(HID_SUSPENDED, &amp;usbhid-&gt;iofl) &amp;&amp;
+        !test_and_set_bit(HID_IN_RUNNING, &amp;usbhid-&gt;iofl)) {
+    rc = usb_submit_urb(usbhid-&gt;urbin, GFP_ATOMIC);
+    if (rc != 0)
+        clear_bit(HID_IN_RUNNING, &amp;usbhid-&gt;iofl);
+}
+spin_unlock_irqrestore(&amp;usbhid-&gt;inlock, flags);
+return rc;
+</code></pre>
+
+<p>}
+由此看到，它会提交usbhid->urbin.
+相对于整个过程来说，如果open了input_device.就要开始从设备读取数据了。</p>
+
+<p>3.3.1: hid_irq_in()函数分析
+Usbhid->urbin传输完成之后，会调用hid_irq_in（）。该函数代码如下：
+static void hid_irq_in(struct urb <em>urb)
+{
+    struct hid_device   </em>hid = urb->context;
+    struct usbhid_device    *usbhid = hid->driver_data;
+    int         status;</p>
+
+<pre><code>switch (urb-&gt;status) {
+    case 0:         /* success */
+        usbhid-&gt;retry_delay = 0;
+        hid_input_report(urb-&gt;context, HID_INPUT_REPORT,
+                 urb-&gt;transfer_buffer,
+                 urb-&gt;actual_length, 1);
+        break;
+    case -EPIPE:        /* stall */
+        clear_bit(HID_IN_RUNNING, &amp;usbhid-&gt;iofl);
+        set_bit(HID_CLEAR_HALT, &amp;usbhid-&gt;iofl);
+        schedule_work(&amp;usbhid-&gt;reset_work);
+        return;
+    case -ECONNRESET:   /* unlink */
+    case -ENOENT:
+    case -ESHUTDOWN:    /* unplug */
+        clear_bit(HID_IN_RUNNING, &amp;usbhid-&gt;iofl);
+        return;
+    case -EILSEQ:       /* protocol error or unplug */
+    case -EPROTO:       /* protocol error or unplug */
+    case -ETIME:        /* protocol error or unplug */
+    case -ETIMEDOUT:    /* Should never happen, but... */
+        clear_bit(HID_IN_RUNNING, &amp;usbhid-&gt;iofl);
+        hid_io_error(hid);
+        return;
+    default:        /* error */
+        warn("input irq status %d received", urb-&gt;status);
+}
+
+status = usb_submit_urb(urb, GFP_ATOMIC);
+if (status) {
+    clear_bit(HID_IN_RUNNING, &amp;usbhid-&gt;iofl);
+    if (status != -EPERM) {
+        err_hid("can't resubmit intr, %s-%s/input%d, status %d",
+                hid_to_usb_dev(hid)-&gt;bus-&gt;bus_name,
+                hid_to_usb_dev(hid)-&gt;devpath,
+                usbhid-&gt;ifnum, status);
+        hid_io_error(hid);
+    }
+}
+</code></pre>
+
+<p>}
+从上面的代码可以看出，它会一直提交usbhid->urbin.以这样的方式轮询HID设备.直到发生错误，清除HID_IN_RUNNING标志退出。
+另外，对于接收到的数据会调用hid_input_report().
+这样函数我们在上面已经分析过，不过那时候还留下了一个尾巴，现在就把它补上</p>
+
+<p>3.4:遗留的尾巴:hid_input_field()函数
+代码如下:
+void hid_input_field(struct hid_device <em>hid, struct hid_field </em>field, <strong>u8 *data, int interrupt)
+{
+    unsigned n;
+    unsigned count = field->report_count;
+    unsigned offset = field->report_offset;
+    unsigned size = field->report_size;
+    </strong>s32 min = field->logical_minimum;
+    <strong>s32 max = field->logical_maximum;
+    </strong>s32 *value;</p>
+
+<pre><code>//每一项report的值都存放在一个32位的的buff中
+if (!(value = kmalloc(sizeof(__s32) * count, GFP_ATOMIC)))
+    return;
+
+for (n = 0; n &lt; count; n++) {
+
+        value[n] = min &lt; 0 ? snto32(extract(data, offset + n * size, size), size) :
+                        extract(data, offset + n * size, size);
+        //Array类型的.且为ErrorRollOver .忽略
+        if (!(field-&gt;flags &amp; HID_MAIN_ITEM_VARIABLE) /* Ignore report if ErrorRollOver */
+            &amp;&amp; value[n] &gt;= min &amp;&amp; value[n] &lt;= max
+            &amp;&amp; field-&gt;usage[value[n] - min].hid == HID_UP_KEYBOARD + 1)
+            goto exit;
+}
+
+for (n = 0; n &lt; count; n++) {
+    //如果field为variable 类型, 如果是var型的话,传递过来的数量应该为了0,1表示按键的状态
+    if (HID_MAIN_ITEM_VARIABLE &amp; field-&gt;flags) {
+        hid_process_event(hid, field, &amp;field-&gt;usage[n], value[n], interrupt);
+        continue;
+    }
+
+    //如果是Array类型,那传递过来的应该就是按键码的usage值(与min相减)
+
+    //如果field里原本有,但传递过来的按键却没有这个键了,表示上次的按键已经松开了.
+    if (field-&gt;value[n] &gt;= min &amp;&amp; field-&gt;value[n] &lt;= max
+        &amp;&amp; field-&gt;usage[field-&gt;value[n] - min].hid
+        &amp;&amp;
+        search(value, field-&gt;value[n], count))
+            hid_process_event(hid, field, &amp;field-&gt;usage[field-&gt;value[n] - min], 0, interrupt);
+
+    //filed里没有,vaule里却有,表示这个键是新按下的
+    if (value[n] &gt;= min &amp;&amp; value[n] &lt;= max
+        &amp;&amp; field-&gt;usage[value[n] - min].hid
+        &amp;&amp; search(field-&gt;value, value[n], count))
+            hid_process_event(hid, field, &amp;field-&gt;usage[value[n] - min], 1, interrupt);
+}
+</code></pre>
+
+<p>//把这一次的按键值保存到field->value中
+    memcpy(field->value, value, count * sizeof(__s32));
+exit:
+    kfree(value);
+}
+在这个函数里,首先要注意的是field的value的部份.结合之前对report description的解析过程好好理解一下.再次给出field的结构.如下图:</p>
+
+<p>上图中的value是附加部份,是在分配field空间的时候留出来的部份
+每一个report项,对于value中的一项,用来存放上一次从设备读取的值或者是要传送给设备的值.
+另外,还需要注意的是,对于array和variable类型的不同.以keyboard类型为例.对于variable,上面的usage数组分别表示了每一个按键的扫描码.因此从设备读取的信息,也就是value中的值表示的是按键的状态,0是松开,1是按下. 而对于array类型.usage保存的是可能出现的按键类型.从设备读取的信息就浊按键的扫描码.
+对于array类型而言,上一次的按键可以从field->value[ ]中找到,就可以得到,上次的按键有没有被松开.或者对比从设备读取回来的值,就可以得知,哪些键是刚被按下去的.
+最后,将读取到的信息更新回filed->value.供下一次按键的时候比较.</p>
+
+<p>每次的按键上报都是调用hid_process_event()来完成的,这个是hid封装的一个input device上报消息的接触,最终会调用input_event()将事件上报.这个过程很简单,可以自行查阅.</p>
+
+<p>四:总结
+总的来说,HID的驱动不算复杂,只是对report description的解析比较晦涩一点.另外这个hid驱动封装了几乎所有类型的HID设备.因此,代码中的分支处理比较繁杂.研究代码的时候,最好是抓住一种类型的HID设备去深入研究.</p>
+
+<hr>
+</div>
+ </div>
+</div>
+</div>
+
+<script src="https://s.tbcdn.cn/g/fi/bui/jquery-1.8.1.min.js"></script>
+<script src="https://s.tbcdn.cn/g/fi/bui/seed-min.js?t=201212261326"></script>
+<script src="../assets/js/config.js"></script>
+<script>
+    BUI.use('common/page', function (Page) {
+        new Page().init();
+    });
+</script>
+</body>
+</html>

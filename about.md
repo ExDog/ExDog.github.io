@@ -39,15 +39,19 @@ tagline: 个人简历
 
     7.威士达康摄像头android 二次开发  （用于小乐课堂，课堂录制部分）
 
-    8.ios Gamaplayer                (一个游戏播放的ios.app)
+    8.ios Gamaplayer                (一个游戏播放的ios.app，做的demo)
+    
+    9.四叶草，android 客户端实现     （一款类似于微信，但面向用户是学校的校园软件）
 
 ### 技能：###
 
     1.熟悉android应用以及android中间层开发.
 
-    2.熟悉ios开发.
+    2.熟练linux环境下工作，基本能使用emacs或vim工作。了解linux系统以及android基本系统结构
 
-    3.熟练linux环境下工作，基本能使用emacs或vim工作。了解linux系统以及android基本系统结构
+    3.熟悉java，c，c++，bash，object-c。了解lisp，make，js，html；
 
-    4.熟悉java，c，c++，bash，object-c。了解lisp，make，js，html；
+    4.掌握常用数据结构算法，http协议
+    
+    5.了解ios开发，了解部分web开发技术
 
